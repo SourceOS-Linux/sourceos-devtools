@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "nlboot-evidence.v1",
+  "kind": "NLBootEvidence",
+  "timestamp": "NOT-A-TIMESTAMP",
+  "target": {
+    "arch": "x86_64"
+  },
+  "boot": {
+    "loader": "systemd-boot"
+  },
+  "status": "invalid-status"
+}

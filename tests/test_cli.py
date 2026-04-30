@@ -59,12 +59,12 @@ class TestProfiles(unittest.TestCase):
 class TestNlboot(unittest.TestCase):
     def test_inspect_evidence_fixture(self):
         path = FIXTURES / "sample_nlboot_evidence.json"
-        args = _Args(path=str(path))
+        args = _Args(path=str(path), validate=False)
         result = nlboot.inspect_evidence(args)
         self.assertIn(result, (0, None))
 
     def test_inspect_evidence_missing_file(self):
-        args = _Args(path="/nonexistent/path/evidence.json")
+        args = _Args(path="/nonexistent/path/evidence.json", validate=False)
         result = nlboot.inspect_evidence(args)
         self.assertEqual(result, 1)
 
@@ -73,7 +73,7 @@ class TestNlboot(unittest.TestCase):
             f.write("not json {{{")
             tmp_path = f.name
         try:
-            args = _Args(path=tmp_path)
+            args = _Args(path=tmp_path, validate=False)
             result = nlboot.inspect_evidence(args)
             self.assertEqual(result, 1)
         finally:
@@ -83,6 +83,67 @@ class TestNlboot(unittest.TestCase):
         path = FIXTURES / "sample_nlboot_evidence.json"
         rc = main(["nlboot", "evidence", "inspect", str(path)])
         self.assertEqual(rc, 0)
+
+    # --- schema validation ---
+
+    def test_validate_evidence_valid_fixture(self):
+        path = FIXTURES / "sample_nlboot_evidence.json"
+        args = _Args(path=str(path))
+        result = nlboot.validate_evidence(args)
+        self.assertEqual(result, 0)
+
+    def test_validate_evidence_invalid_fixture(self):
+        path = FIXTURES / "invalid_nlboot_evidence.json"
+        args = _Args(path=str(path))
+        result = nlboot.validate_evidence(args)
+        self.assertEqual(result, 1)
+
+    def test_validate_evidence_missing_file(self):
+        args = _Args(path="/nonexistent/evidence.json")
+        result = nlboot.validate_evidence(args)
+        self.assertEqual(result, 1)
+
+    def test_validate_evidence_bad_json(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            f.write("not json {{{")
+            tmp_path = f.name
+        try:
+            args = _Args(path=tmp_path)
+            result = nlboot.validate_evidence(args)
+            self.assertEqual(result, 1)
+        finally:
+            os.unlink(tmp_path)
+
+    def test_validate_evidence_unknown_schema(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump({"schemaVersion": "unknown-schema.v99", "kind": "Unknown"}, f)
+            tmp_path = f.name
+        try:
+            args = _Args(path=tmp_path)
+            result = nlboot.validate_evidence(args)
+            self.assertEqual(result, 1)
+        finally:
+            os.unlink(tmp_path)
+
+    def test_inspect_with_validate_flag_valid(self):
+        path = FIXTURES / "sample_nlboot_evidence.json"
+        rc = main(["nlboot", "evidence", "inspect", "--validate", str(path)])
+        self.assertEqual(rc, 0)
+
+    def test_inspect_with_validate_flag_invalid(self):
+        path = FIXTURES / "invalid_nlboot_evidence.json"
+        rc = main(["nlboot", "evidence", "inspect", "--validate", str(path)])
+        self.assertEqual(rc, 1)
+
+    def test_validate_subcommand_valid_via_main(self):
+        path = FIXTURES / "sample_nlboot_evidence.json"
+        rc = main(["nlboot", "evidence", "validate", str(path)])
+        self.assertEqual(rc, 0)
+
+    def test_validate_subcommand_invalid_via_main(self):
+        path = FIXTURES / "invalid_nlboot_evidence.json"
+        rc = main(["nlboot", "evidence", "validate", str(path)])
+        self.assertEqual(rc, 1)
 
 
 class TestRelease(unittest.TestCase):
