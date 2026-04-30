@@ -1,0 +1,43 @@
+schemaVersion: repo-maturity.v1
+repository: SourceOS-Linux/sourceos-devtools
+plane: sourceos-devtools
+status: active
+canonicality: canonical
+owners:
+  - SourceOS-Linux
+maturity:
+  level: M1
+  targetLevel: M3
+  evidence:
+    - README.md defines repo scope.
+    - docs/DEVTOOLS_SCOPE.md defines owned and non-owned surfaces.
+    - AGENTS.md and .github/copilot-instructions.md define agent operating behavior.
+validation:
+  commands:
+    - make validate
+  ciRequired: true
+  lastKnownStatus: unknown
+integrations:
+  - repository: SociOS-Linux/nlboot
+    relationship: consume NLBoot evidence and operator surfaces
+    required: true
+  - repository: SourceOS-Linux/sourceos-spec
+    relationship: consume canonical schemas
+    required: true
+  - repository: SourceOS-Linux/sourceos-boot
+    relationship: consume SourceOS boot/recovery integration semantics
+    required: true
+  - repository: SocioProphet/homebrew-prophet
+    relationship: publish install formula and release path
+    required: true
+  - repository: SocioProphet/model-router
+    relationship: consume model routing client contracts
+    required: false
+  - repository: SocioProphet/agent-registry
+    relationship: consume agent identity and tool-grant contracts
+    required: false
+nextActions:
+  - Scaffold minimal read-only sourceosctl CLI.
+  - Add fixture-backed validation.
+  - Add CI validation.
+  - Add install path through Homebrew and Nix/devshell.
