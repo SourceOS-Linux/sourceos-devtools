@@ -9,4 +9,5 @@ validate: test
 	@python3 scripts/validate_scaffold.py
 
 test:
+	@python3 -m pip install --user jsonschema >/dev/null
 	@python3 -m unittest discover -s tests -v

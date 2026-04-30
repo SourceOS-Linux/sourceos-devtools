@@ -52,7 +52,19 @@ def build_parser() -> argparse.ArgumentParser:
         "inspect", help="Inspect a NLBoot evidence file"
     )
     nlboot_inspect_p.add_argument("path", help="Path to NLBoot evidence JSON file")
+    nlboot_inspect_p.add_argument(
+        "--validate",
+        action="store_true",
+        default=False,
+        help="Validate the evidence file against its bundled JSON Schema",
+    )
     nlboot_inspect_p.set_defaults(func=nlboot.inspect_evidence)
+
+    nlboot_validate_p = nlboot_evidence_sub.add_parser(
+        "validate", help="Validate a NLBoot evidence file against its bundled schema"
+    )
+    nlboot_validate_p.add_argument("path", help="Path to NLBoot evidence JSON file")
+    nlboot_validate_p.set_defaults(func=nlboot.validate_evidence)
 
     # --- release ---
     release_p = sub.add_parser("release", help="Release artifact inspection")

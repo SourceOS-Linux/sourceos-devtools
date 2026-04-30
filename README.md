@@ -51,6 +51,8 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl doctor` | Run environment health checks (read-only) |
 | `sourceosctl profiles list` | List available SourceOS profiles (read-only) |
 | `sourceosctl nlboot evidence inspect <path>` | Inspect a NLBoot evidence JSON file (read-only) |
+| `sourceosctl nlboot evidence inspect --validate <path>` | Inspect and validate a NLBoot evidence file against its bundled schema (read-only) |
+| `sourceosctl nlboot evidence validate <path>` | Validate a NLBoot evidence file against its bundled JSON Schema (read-only) |
 | `sourceosctl release inspect <path>` | Inspect a release artifact JSON file (read-only) |
 | `sourceosctl fingerprint collect --dry-run` | Print environment fingerprint fields (dry-run only) |
 | `sourceosctl ai labs list` | List available AI labs (read-only) |
@@ -63,6 +65,8 @@ python3 bin/sourceosctl --help
 python3 bin/sourceosctl doctor
 python3 bin/sourceosctl profiles list
 python3 bin/sourceosctl nlboot evidence inspect fixtures/sample_nlboot_evidence.json
+python3 bin/sourceosctl nlboot evidence inspect --validate fixtures/sample_nlboot_evidence.json
+python3 bin/sourceosctl nlboot evidence validate fixtures/sample_nlboot_evidence.json
 python3 bin/sourceosctl release inspect fixtures/sample_release.json
 python3 bin/sourceosctl fingerprint collect --dry-run
 python3 bin/sourceosctl ai labs list
@@ -101,7 +105,7 @@ M1 is repo maturity and install surface definition:
 make validate
 ```
 
-The validation target runs the unit test suite and checks repository metadata. All 21 tests must pass.
+The validation target runs the unit test suite and checks repository metadata. All tests must pass.
 
 ```bash
 make test   # run tests only
