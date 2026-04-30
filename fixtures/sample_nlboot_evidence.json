@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "nlboot-evidence.v1",
+  "kind": "NLBootEvidence",
+  "timestamp": "2025-01-01T00:00:00Z",
+  "target": {
+    "host": "example-host",
+    "arch": "x86_64",
+    "uefi": true
+  },
+  "boot": {
+    "loader": "systemd-boot",
+    "kernel": "6.6.0-sourceos",
+    "cmdline": "root=/dev/sda1 ro quiet"
+  },
+  "status": "verified",
+  "signature": "stub-signature-not-real"
+}

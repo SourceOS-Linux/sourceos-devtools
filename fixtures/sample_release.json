@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "sourceos-release.v1",
+  "name": "sourceos-devtools",
+  "version": "0.1.0",
+  "channel": "stable",
+  "artifacts": [
+    "sourceosctl-0.1.0-linux-x86_64.tar.gz",
+    "sourceosctl-0.1.0-darwin-arm64.tar.gz"
+  ],
+  "metadata": {
+    "gitRef": "refs/heads/main",
+    "builtAt": "2025-01-01T00:00:00Z"
+  }
+}

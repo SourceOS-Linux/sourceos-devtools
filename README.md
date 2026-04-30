@@ -34,6 +34,45 @@ It should not contain:
 - SourceOS image build state;
 - secrets, tokens, credentials, private keys, or device-specific enrollment secrets.
 
+## sourceosctl CLI
+
+`sourceosctl` is the read-only/dry-run CLI surface for SourceOS developer and AI operator workflows.
+
+### Usage
+
+```text
+sourceosctl [--version] <command> [<subcommand>] [options]
+```
+
+### Commands
+
+| Command | Description |
+| --- | --- |
+| `sourceosctl doctor` | Run environment health checks (read-only) |
+| `sourceosctl profiles list` | List available SourceOS profiles (read-only) |
+| `sourceosctl nlboot evidence inspect <path>` | Inspect a NLBoot evidence JSON file (read-only) |
+| `sourceosctl release inspect <path>` | Inspect a release artifact JSON file (read-only) |
+| `sourceosctl fingerprint collect --dry-run` | Print environment fingerprint fields (dry-run only) |
+| `sourceosctl ai labs list` | List available AI labs (read-only) |
+| `sourceosctl agents sandbox plan --dry-run` | Print agent sandbox plan (dry-run only) |
+
+### Running from the repo
+
+```bash
+python3 bin/sourceosctl --help
+python3 bin/sourceosctl doctor
+python3 bin/sourceosctl profiles list
+python3 bin/sourceosctl nlboot evidence inspect fixtures/sample_nlboot_evidence.json
+python3 bin/sourceosctl release inspect fixtures/sample_release.json
+python3 bin/sourceosctl fingerprint collect --dry-run
+python3 bin/sourceosctl ai labs list
+python3 bin/sourceosctl agents sandbox plan --dry-run
+```
+
+### Design constraints
+
+All commands in the current surface are **read-only or dry-run**. No mutating command is implemented. Commands that would mutate host state are explicitly rejected at runtime.
+
 ## First milestone
 
 M1 is repo maturity and install surface definition:
@@ -62,4 +101,9 @@ M1 is repo maturity and install surface definition:
 make validate
 ```
 
-The initial validation target checks repository metadata and JSON/YAML syntax where present. Implementation-specific validation should be added with each tool surface.
+The validation target runs the unit test suite and checks repository metadata. All 21 tests must pass.
+
+```bash
+make test   # run tests only
+```
+

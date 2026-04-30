@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""sourceosctl entry-point script."""
+import sys
+import os
+
+# Allow running directly from the repo root without installing.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sourceosctl.cli import main
+
+sys.exit(main())
