@@ -1,0 +1,10 @@
+{
+  "note": "stub cargo-metadata for fixture/inspection purposes only",
+  "packages": [
+    {
+      "name": "nlboot-client",
+      "version": "0.1.0",
+      "id": "nlboot-client 0.1.0 (path+file:///stub)"
+    }
+  ]
+}
