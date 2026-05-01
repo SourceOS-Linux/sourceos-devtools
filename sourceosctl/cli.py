@@ -74,6 +74,15 @@ def build_parser() -> argparse.ArgumentParser:
     release_inspect_p.add_argument("path", help="Path to release artifact JSON file")
     release_inspect_p.set_defaults(func=release.inspect)
 
+    release_inspect_archive_p = release_sub.add_parser(
+        "inspect-archive",
+        help="Inspect a NLBoot release archive directory for required files",
+    )
+    release_inspect_archive_p.add_argument(
+        "path", help="Path to unpacked NLBoot release archive directory"
+    )
+    release_inspect_archive_p.set_defaults(func=release.inspect_archive)
+
     # --- fingerprint ---
     fingerprint_p = sub.add_parser("fingerprint", help="Environment fingerprint utilities")
     fingerprint_sub = fingerprint_p.add_subparsers(

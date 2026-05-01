@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "nlboot-release.v1",
+  "name": "nlboot-client",
+  "version": "0.1.0",
+  "channel": "stable",
+  "note": "stub release-manifest for fixture/inspection purposes only",
+  "artifacts": [
+    "nlboot-client",
+    "Cargo.lock",
+    "cargo-metadata.json",
+    "sbom.spdx.json"
+  ],
+  "metadata": {
+    "gitRef": "refs/heads/main",
+    "builtAt": "2025-01-01T00:00:00Z"
+  }
+}

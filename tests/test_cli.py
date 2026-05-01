@@ -175,6 +175,41 @@ class TestRelease(unittest.TestCase):
         self.assertEqual(rc, 0)
 
 
+class TestReleaseArchive(unittest.TestCase):
+    def test_inspect_archive_valid(self):
+        path = FIXTURES / "nlboot_release_valid"
+        args = _Args(path=str(path))
+        result = release.inspect_archive(args)
+        self.assertEqual(result, 0)
+
+    def test_inspect_archive_invalid(self):
+        path = FIXTURES / "nlboot_release_invalid"
+        args = _Args(path=str(path))
+        result = release.inspect_archive(args)
+        self.assertEqual(result, 1)
+
+    def test_inspect_archive_missing_dir(self):
+        args = _Args(path="/nonexistent/nlboot_release")
+        result = release.inspect_archive(args)
+        self.assertEqual(result, 1)
+
+    def test_inspect_archive_not_a_directory(self):
+        path = FIXTURES / "sample_release.json"
+        args = _Args(path=str(path))
+        result = release.inspect_archive(args)
+        self.assertEqual(result, 1)
+
+    def test_inspect_archive_valid_via_main(self):
+        path = FIXTURES / "nlboot_release_valid"
+        rc = main(["release", "inspect-archive", str(path)])
+        self.assertEqual(rc, 0)
+
+    def test_inspect_archive_invalid_via_main(self):
+        path = FIXTURES / "nlboot_release_invalid"
+        rc = main(["release", "inspect-archive", str(path)])
+        self.assertEqual(rc, 1)
+
+
 class TestFingerprint(unittest.TestCase):
     def test_collect_dry_run(self):
         args = _Args(dry_run=True)
