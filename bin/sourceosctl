@@ -6,6 +6,19 @@ import os
 # Allow running directly from the repo root without installing.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Lightweight plugin routing for newer command groups while keeping the core
+# argparse surface stable. These command groups are non-mutating plan/probe
+# surfaces and own their own subparsers.
+if len(sys.argv) > 1 and sys.argv[1] == "network":
+    from sourceosctl.commands.network import network_main
+
+    sys.exit(network_main(sys.argv[2:]))
+
+if len(sys.argv) > 1 and sys.argv[1] == "native-assistant":
+    from sourceosctl.commands.network import native_assistant_main
+
+    sys.exit(native_assistant_main(sys.argv[2:]))
+
 from sourceosctl.cli import main
 
 sys.exit(main())
