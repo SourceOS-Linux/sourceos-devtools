@@ -8,6 +8,7 @@ install mesh components, contact model providers, or invoke native assistants.
 
 from __future__ import annotations
 
+import argparse
 import datetime as _dt
 import hashlib
 import json
@@ -192,3 +193,68 @@ def evidence_inspect(args) -> int:
             "bridgeRef": payload.get("bridgeRef"),
         }
     )
+
+
+def build_network_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="sourceosctl network", description="SourceOS Network Door helpers")
+    sub = parser.add_subparsers(dest="network_command", required=True)
+
+    doctor_p = sub.add_parser("doctor", help="Inspect network contract posture")
+    doctor_p.set_defaults(func=doctor)
+
+    plan_p = sub.add_parser("plan", help="Render non-mutating network route plan")
+    plan_p.add_argument("--scope", default="workspace", choices=["user", "enterprise", "device", "workspace", "agent-machine", "cluster"])
+    plan_p.add_argument("--destination", default=None, help="Destination label/domain; output stores only hash")
+    plan_p.add_argument("--enterprise", action="store_true", default=False, help="Include enterprise firewall precedence")
+    plan_p.add_argument("--mesh", action="store_true", default=False, help="Include mesh binding reference")
+    plan_p.add_argument("--allow-listed", action="store_true", default=False, help="Model as allow-listed by policy")
+    plan_p.add_argument("--network-profile-ref", default=None)
+    plan_p.add_argument("--mesh-binding-ref", default=ISTIO_MESH_REF)
+    plan_p.add_argument("--model-provider-ref", default=BYOM_PROVIDER_REF)
+    plan_p.set_defaults(func=plan)
+
+    provider_p = sub.add_parser("provider", help="Render external/BYOM model provider plan")
+    provider_p.add_argument("--provider-ref", default=BYOM_PROVIDER_REF)
+    provider_p.add_argument("--provider-class", default="openai-compatible")
+    provider_p.add_argument("--owner", default="user", choices=["user", "enterprise", "workspace", "tenant", "device"])
+    provider_p.add_argument("--network-profile-ref", default=NETWORK_PROFILE_REF)
+    provider_p.add_argument("--firewall-binding-ref", default=USER_FIREWALL_REF)
+    provider_p.add_argument("--mesh-binding-ref", default=None)
+    provider_p.add_argument("--allow-egress", action="store_true", default=False)
+    provider_p.set_defaults(func=provider_plan)
+
+    evidence_p = sub.add_parser("evidence", help="Network evidence helpers")
+    evidence_sub = evidence_p.add_subparsers(dest="network_evidence_command", required=True)
+    evidence_inspect_p = evidence_sub.add_parser("inspect", help="Inspect Network Door evidence JSON")
+    evidence_inspect_p.add_argument("path")
+    evidence_inspect_p.set_defaults(func=evidence_inspect)
+    return parser
+
+
+def build_native_assistant_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="sourceosctl native-assistant", description="SourceOS Native Assistant Bridge helpers")
+    sub = parser.add_subparsers(dest="native_assistant_command", required=True)
+
+    plan_p = sub.add_parser("plan", help="Render non-mutating native assistant bridge plan")
+    plan_p.add_argument("--bridge-ref", default=APPLE_APP_INTENTS_REF)
+    plan_p.add_argument("--platform", default="macos", choices=["macos", "ios", "ipados", "watchos", "visionos", "android", "windows", "linux", "browser", "cross-device"])
+    plan_p.add_argument("--bridge-class", default="apple-app-intents", choices=["apple-app-intents", "apple-shortcuts", "apple-foundation-models", "android-intents", "windows-shell", "browser-extension", "native-messaging", "mcp", "other"])
+    plan_p.add_argument("--operation", default="open-workroom", choices=["open-workroom", "create-office-artifact", "summarize", "route-local-model", "handoff-to-agent-machine", "inspect-evidence", "search-workspace", "create-reminder", "create-note", "share-artifact", "other"])
+    plan_p.add_argument("--prompt", default=None, help="Optional request text; output stores only hash")
+    plan_p.add_argument("--allow-cross-device", action="store_true", default=False)
+    plan_p.add_argument("--network-profile-ref", default=NETWORK_PROFILE_REF)
+    plan_p.add_argument("--model-route-binding-ref", default="urn:socioprophet:model-router-binding:demo-user-local-llama32")
+    plan_p.set_defaults(func=native_assistant_plan)
+    return parser
+
+
+def network_main(argv: list[str] | None = None) -> int:
+    parser = build_network_parser()
+    args = parser.parse_args(argv)
+    return args.func(args) or 0
+
+
+def native_assistant_main(argv: list[str] | None = None) -> int:
+    parser = build_native_assistant_parser()
+    args = parser.parse_args(argv)
+    return args.func(args) or 0
