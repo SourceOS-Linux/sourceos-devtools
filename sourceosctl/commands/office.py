@@ -111,9 +111,9 @@ def _sha256(path: Path) -> Optional[str]:
     return "sha256:" + digest.hexdigest()
 
 
-def _artifact_plan(args, operation: str) -> Dict[str, Any]:
+def _artifact_plan(args, operation: str, format_override: Optional[str] = None) -> Dict[str, Any]:
     artifact_type = getattr(args, "artifact_type", None) or "document"
-    fmt = getattr(args, "format", None) or "docx"
+    fmt = format_override or getattr(args, "format", None) or "docx"
     title = getattr(args, "title", None) or "Untitled Office Artifact"
     workroom_id = getattr(args, "workroom_id", None) or DEFAULT_WORKROOM_ID
     output_root = getattr(args, "output_root", None) or DEFAULT_OUTPUT_ROOT
@@ -229,7 +229,7 @@ def convert(args) -> int:
     if not getattr(args, "dry_run", True):
         print("error: office convert is dry-run only in this release", file=sys.stderr)
         return 1
-    payload = _artifact_plan(args, "convert")
+    payload = _artifact_plan(args, "convert", format_override=args.to)
     payload["conversion"] = {
         "input": _redact_home(args.input),
         "inputExists": Path(_expand(args.input)).exists(),
