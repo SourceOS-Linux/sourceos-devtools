@@ -12,6 +12,7 @@ from sourceosctl.commands import (
     fingerprint,
     ai,
     agents,
+    agent_machine,
 )
 
 
@@ -131,6 +132,67 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print plan without executing (default: True)",
     )
     agents_sandbox_plan_p.set_defaults(func=agents.sandbox_plan)
+
+    # --- agent-machine ---
+    agent_machine_p = sub.add_parser("agent-machine", help="Agent Machine helpers")
+    agent_machine_sub = agent_machine_p.add_subparsers(
+        dest="agent_machine_command", metavar="<subcommand>"
+    )
+    agent_machine_sub.required = True
+
+    mounts_p = agent_machine_sub.add_parser("mounts", help="Agent Machine mount helpers")
+    mounts_sub = mounts_p.add_subparsers(dest="agent_machine_mounts_command", metavar="<subcommand>")
+    mounts_sub.required = True
+
+    def add_mount_common(p):
+        p.add_argument("--profile", default="macos-podman", help="Agent Machine profile name")
+        p.add_argument("--dev-root", default="~/dev", help="Host code/repository root")
+        p.add_argument(
+            "--docs-root",
+            default="~/Documents/SourceOS/agent-output",
+            help="Host generated document/report output root",
+        )
+        p.add_argument(
+            "--downloads-root",
+            default="~/Downloads/SourceOS/agent-downloads",
+            help="Host scoped browser downloads root",
+        )
+
+    mounts_plan_p = mounts_sub.add_parser("plan", help="Render mount plan (dry-run)")
+    add_mount_common(mounts_plan_p)
+    mounts_plan_p.set_defaults(func=agent_machine.mounts_plan)
+
+    mounts_init_p = mounts_sub.add_parser("init", help="Render mount initialization plan (dry-run only)")
+    add_mount_common(mounts_init_p)
+    mounts_init_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        dest="dry_run",
+        help="Print plan without creating directories or mounts (default: True)",
+    )
+    mounts_init_p.set_defaults(func=agent_machine.mounts_init)
+
+    mounts_inspect_p = mounts_sub.add_parser("inspect", help="Inspect default/local mount posture")
+    add_mount_common(mounts_inspect_p)
+    mounts_inspect_p.add_argument(
+        "--include-downloads",
+        action="store_true",
+        default=False,
+        help="Include scoped browser downloads mount in output",
+    )
+    mounts_inspect_p.set_defaults(func=agent_machine.mounts_inspect)
+
+    mounts_evidence_p = mounts_sub.add_parser("evidence", help="Mount evidence helpers")
+    mounts_evidence_sub = mounts_evidence_p.add_subparsers(
+        dest="agent_machine_mounts_evidence_command", metavar="<subcommand>"
+    )
+    mounts_evidence_sub.required = True
+    mounts_evidence_inspect_p = mounts_evidence_sub.add_parser(
+        "inspect", help="Inspect an Agent Machine mount evidence JSON file"
+    )
+    mounts_evidence_inspect_p.add_argument("path", help="Path to mount evidence JSON file")
+    mounts_evidence_inspect_p.set_defaults(func=agent_machine.mounts_evidence_inspect)
 
     return parser
 
