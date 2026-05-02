@@ -1,19 +1,21 @@
 """agent-machine command helpers.
 
-This module implements the first dry-run/read-only slice of the SourceOS
-Agent Machine local mount surface.  It does not create Podman machines, create
-containers, or mutate host mounts.  It renders and inspects the mount contract
-that later commands will apply under policy.
+This module implements SourceOS Agent Machine local mount planning and the first
+small guarded materialization slice.  It does not create Podman machines,
+containers, or bind mounts.  It may create explicitly-scoped local output
+folders only when called with --execute --policy-ok.
 """
 
 from __future__ import annotations
 
+import datetime as _dt
+import hashlib
 import json
 import os
 import platform
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable
 
 
 DEFAULT_DEV_ROOT = "~/dev"
@@ -23,6 +25,10 @@ DEFAULT_DOWNLOADS_ROOT = "~/Downloads/SourceOS/agent-downloads"
 DEFAULT_DEV_AGENT_PATH = "/workspace/dev"
 DEFAULT_DOCS_AGENT_PATH = "/workspace/output"
 DEFAULT_DOWNLOADS_AGENT_PATH = "/workspace/downloads"
+
+LOCAL_DATA_PLANE_REF = "urn:srcos:agent-machine-local-data-plane:local-default"
+MOUNT_POLICY_REF = "urn:srcos:agent-machine-mount-policy:default-deny-scoped-roots"
+WORKSPACE_ID = "urn:srcos:agent-machine-workspace:local-default"
 
 SENSITIVE_PATTERNS = [
     "$HOME",
@@ -66,9 +72,13 @@ def _expand(path: str) -> str:
     return os.path.abspath(os.path.expanduser(path))
 
 
+def _home() -> str:
+    return str(Path.home())
+
+
 def _redact_home(path: str) -> str:
     """Redact the concrete home path when printing evidence-like output."""
-    home = str(Path.home())
+    home = _home()
     expanded = _expand(path)
     if expanded == home:
         return "$HOME"
@@ -79,6 +89,34 @@ def _redact_home(path: str) -> str:
 
 def _path_exists(path: str) -> bool:
     return Path(_expand(path)).exists()
+
+
+def _policy_hash(payload: Dict[str, Any]) -> str:
+    normalized = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(normalized).hexdigest()
+
+
+def _is_whole_home(path: str) -> bool:
+    return _expand(path) == _home()
+
+
+def _is_unscoped_downloads(path: str) -> bool:
+    return _expand(path) == _expand("~/Downloads")
+
+
+def _validate_mount_plan(plan: Dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for mount in plan["mounts"]:
+        host_path = mount["hostPath"]
+        if _is_whole_home(host_path):
+            errors.append(f"{mount['mountId']}: whole-home mount is forbidden: {mount['resolvedHostPath']}")
+        if mount["pathClass"] == "downloads" and _is_unscoped_downloads(host_path):
+            errors.append("browser-downloads: use ~/Downloads/SourceOS/agent-downloads, not ~/Downloads")
+        redacted = mount["resolvedHostPath"]
+        for sensitive in [".ssh", ".gnupg", "Keychains", ".aws", ".config/gcloud", ".azure", ".kube"]:
+            if sensitive in redacted:
+                errors.append(f"{mount['mountId']}: sensitive host path denied: {redacted}")
+    return errors
 
 
 def _mount(
@@ -115,7 +153,7 @@ def _build_mount_plan(args) -> Dict[str, Any]:
     downloads_root = getattr(args, "downloads_root", None) or DEFAULT_DOWNLOADS_ROOT
     profile = getattr(args, "profile", None) or "macos-podman"
 
-    return {
+    plan = {
         "type": "AgentMachineMountPlan",
         "specVersion": "0.1.0",
         "profile": profile,
@@ -179,6 +217,60 @@ def _build_mount_plan(args) -> Dict[str, Any]:
         },
         "dryRun": True,
     }
+    plan["policyHash"] = _policy_hash({"mounts": plan["mounts"], "deniedPatterns": plan["deniedPatterns"]})
+    return plan
+
+
+def _build_mount_evidence(plan: Dict[str, Any], created: list[str], denied: list[str]) -> Dict[str, Any]:
+    return {
+        "kind": "AgentMachineMountEvidence",
+        "capturedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "workspaceId": WORKSPACE_ID,
+        "bundle": None,
+        "executor": "sourceosctl-local",
+        "backendIntent": "agent-machine",
+        "localDataPlaneRef": LOCAL_DATA_PLANE_REF,
+        "mountPolicyRef": MOUNT_POLICY_REF,
+        "secureHostInterfaceRef": None,
+        "topolvmPlacementProfileRef": None,
+        "storageBackend": plan["storageBackend"],
+        "policyHash": plan["policyHash"],
+        "gitRef": None,
+        "mounts": [
+            {
+                "mountId": m["mountId"],
+                "pathClass": m["pathClass"],
+                "hostPathRef": m["resolvedHostPath"],
+                "agentPath": m["agentPath"],
+                "accessMode": m["accessMode"],
+                "storageBackend": plan["storageBackend"],
+                "gitRef": None,
+                "contentHash": None,
+                "secretsProhibited": m["secretsProhibited"],
+                "directExecutionAllowed": m["directExecutionAllowed"],
+                "existsAtRunStart": m["exists"],
+            }
+            for m in plan["mounts"]
+        ],
+        "deniedAttempts": [
+            {"pathRef": item, "reason": "Denied by Agent Machine mount policy", "severity": "deny"}
+            for item in denied
+        ],
+        "downloadArtifacts": [],
+        "topolvmPlacement": None,
+        "redactionSummary": {
+            "hostUserRedacted": True,
+            "secretLikeValuesRedacted": 0,
+            "notes": "sourceosctl local guarded materialization evidence",
+        },
+        "createdHostPaths": created,
+    }
+
+
+def _write_json(path: str, payload: Dict[str, Any]) -> None:
+    target = Path(_expand(path))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _print_json(payload: Dict[str, Any]) -> int:
@@ -188,30 +280,67 @@ def _print_json(payload: Dict[str, Any]) -> int:
 
 def mounts_plan(args) -> int:
     """Render a dry-run mount plan for an Agent Machine profile."""
-    return _print_json(_build_mount_plan(args))
+    plan = _build_mount_plan(args)
+    errors = _validate_mount_plan(plan)
+    if errors:
+        plan["policyErrors"] = errors
+    return _print_json(plan)
 
 
 def mounts_init(args) -> int:
-    """Render the mount initialization plan.
+    """Render or execute guarded initialization for scoped local directories.
 
-    The current implementation remains dry-run only.  It tells the operator
-    which directories would be created and which mounts would be declared.
+    Execution creates only declared, create-if-missing local directories such as
+    the docs output root and scoped browser downloads root. It does not mount
+    Podman volumes or create containers.
     """
-    if not getattr(args, "dry_run", True):
-        print(
-            "error: mount initialization is dry-run only in this release",
-            file=sys.stderr,
-        )
+    execute = bool(getattr(args, "execute", False))
+    policy_ok = bool(getattr(args, "policy_ok", False))
+
+    if getattr(args, "dry_run", True) is False and not execute:
+        print("error: non-dry-run mount initialization requires --execute", file=sys.stderr)
         return 1
 
     plan = _build_mount_plan(args)
     plan["operation"] = "init"
-    plan["wouldCreate"] = [
-        m["resolvedHostPath"]
+    errors = _validate_mount_plan(plan)
+    if errors:
+        plan["policyErrors"] = errors
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        return 1
+
+    would_create = [
+        m
         for m in plan["mounts"]
         if m.get("createIfMissing") and not m.get("exists")
     ]
-    return _print_json(plan)
+    plan["wouldCreate"] = [m["resolvedHostPath"] for m in would_create]
+
+    if not execute:
+        return _print_json(plan)
+
+    if not policy_ok:
+        print("error: --execute requires --policy-ok for mount initialization", file=sys.stderr)
+        return 1
+
+    created: list[str] = []
+    for mount in would_create:
+        Path(_expand(mount["hostPath"])).mkdir(parents=True, exist_ok=True)
+        created.append(mount["resolvedHostPath"])
+
+    evidence = _build_mount_evidence(plan, created=created, denied=[])
+    evidence_out = getattr(args, "evidence_out", None)
+    if evidence_out:
+        _write_json(evidence_out, evidence)
+
+    result = {
+        "type": "AgentMachineMountInitResult",
+        "executed": True,
+        "created": created,
+        "evidenceOut": _redact_home(evidence_out) if evidence_out else None,
+        "evidence": evidence if not evidence_out else None,
+    }
+    return _print_json(result)
 
 
 def mounts_inspect(args) -> int:
@@ -236,9 +365,10 @@ def mounts_evidence_inspect(args) -> int:
         print(f"error: invalid JSON: {exc}", file=sys.stderr)
         return 1
 
+    kind = payload.get("kind") or payload.get("type")
     summary = {
         "path": str(path),
-        "type": payload.get("type"),
+        "kind": kind,
         "workspaceId": payload.get("workspaceId"),
         "policyHash": payload.get("policyHash"),
         "mountCount": len(payload.get("mounts", [])) if isinstance(payload.get("mounts"), list) else 0,

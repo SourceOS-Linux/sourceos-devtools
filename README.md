@@ -19,7 +19,7 @@ It should contain:
 - guardrail/eval/evidence helpers;
 - agent sandbox/run helpers;
 - Agent Machine local mount and secure host-interface helpers;
-- Office Plane dry-run, inspection, and evidence helpers;
+- Office Plane dry-run, guarded execution, inspection, and evidence helpers;
 - fingerprint and proof bundle tools;
 - local-to-mesh registration helpers;
 - release/operator install scripts.
@@ -38,7 +38,7 @@ It should not contain:
 
 ## sourceosctl CLI
 
-`sourceosctl` is the read-only/dry-run CLI surface for SourceOS developer and AI operator workflows.
+`sourceosctl` is the guarded CLI surface for SourceOS developer and AI operator workflows. Commands are read-only or dry-run by default. Narrow local mutations require explicit `--execute --policy-ok` and emit evidence.
 
 ### Usage
 
@@ -62,12 +62,15 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl agents sandbox plan --dry-run` | Print agent sandbox plan (dry-run only) |
 | `sourceosctl agent-machine mounts plan` | Render Agent Machine local mount plan for dev/docs/downloads roots (dry-run) |
 | `sourceosctl agent-machine mounts init --dry-run` | Render mount initialization plan; no directories or mounts are created |
+| `sourceosctl agent-machine mounts init --execute --policy-ok` | Create only scoped local output/download directories and emit AgentMachineMountEvidence |
 | `sourceosctl agent-machine mounts inspect [--include-downloads]` | Inspect default/local Agent Machine mount posture |
 | `sourceosctl agent-machine mounts evidence inspect <path>` | Inspect Agent Machine mount evidence JSON (read-only) |
 | `sourceosctl office doctor` | Inspect local Office Plane backend availability, including LibreOffice detection |
 | `sourceosctl office plan` | Render an OfficeArtifact-compatible workroom artifact plan |
 | `sourceosctl office generate --dry-run` | Render an Office generation plan without writing files |
+| `sourceosctl office generate --execute --policy-ok --format md|txt|json` | Write a guarded text/Markdown/JSON artifact and emit OfficeArtifactEvidence |
 | `sourceosctl office convert <path> --to <format> --dry-run` | Render a LibreOffice-style conversion plan without writing files |
+| `sourceosctl office convert <path> --to <format> --execute --policy-ok` | Run guarded local LibreOffice conversion and emit OfficeArtifactEvidence |
 | `sourceosctl office inspect <path>` | Inspect a local office artifact file and hash it |
 | `sourceosctl office evidence inspect <path>` | Inspect Office Plane evidence JSON (read-only) |
 
@@ -87,16 +90,19 @@ python3 bin/sourceosctl ai labs list
 python3 bin/sourceosctl agents sandbox plan --dry-run
 python3 bin/sourceosctl agent-machine mounts plan
 python3 bin/sourceosctl agent-machine mounts init --dry-run
+python3 bin/sourceosctl agent-machine mounts init --execute --policy-ok --evidence-out ./mount-evidence.json
 python3 bin/sourceosctl agent-machine mounts inspect --include-downloads
 python3 bin/sourceosctl office doctor
 python3 bin/sourceosctl office plan --artifact-type slide-deck --format pptx --title "Demo Deck"
 python3 bin/sourceosctl office generate --dry-run --artifact-type document --format docx --title "Demo Report"
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type document --format md --title "Demo Report" --evidence-out ./office-evidence.json
 python3 bin/sourceosctl office convert ./example.docx --to pdf --dry-run
+python3 bin/sourceosctl office convert ./example.docx --to pdf --execute --policy-ok --evidence-out ./office-convert-evidence.json
 ```
 
 ### Agent Machine local mount defaults
 
-The first Agent Machine mount slice is contract-first and dry-run only. It aligns with the SourceOS contracts in `SourceOS-Linux/sourceos-spec`:
+The first Agent Machine mount slice aligns with the SourceOS contracts in `SourceOS-Linux/sourceos-spec`:
 
 - `AgentMachineLocalDataPlane`
 - `AgentMachineMountPolicy`
@@ -107,16 +113,18 @@ Default host roots:
 | Purpose | Host path | Agent path | Posture |
 | --- | --- | --- | --- |
 | Code / repositories | `~/dev` | `/workspace/dev` | read/write; explicit workspace root |
-| Generated documents / reports | `~/Documents/SourceOS/agent-output` | `/workspace/output` | read/write; created only by future explicit mutation |
+| Generated documents / reports | `~/Documents/SourceOS/agent-output` | `/workspace/output` | read/write; created only by explicit guarded materialization |
 | Browser downloads | `~/Downloads/SourceOS/agent-downloads` | `/workspace/downloads` | browser read/write; agent read-only |
 
 The CLI does **not** mount `$HOME` wholesale and does **not** expose `.ssh`, `.gnupg`, browser profiles, keychains, cloud credential directories, token stores, or password stores by default.
+
+Guarded materialization creates only the declared `createIfMissing` folders. It does not create Podman machines, Podman bind mounts, containers, or background services.
 
 TopoLVM is treated as a Linux cluster-local backend profile for the same logical mount contract. It is not used for macOS/APFS local mode and it is not represented as cross-node shared storage.
 
 ### Office Plane local defaults
 
-The first Office Plane slice is dry-run/read-only. It aligns with `SocioProphet/prophet-workspace`:
+The Office Plane aligns with `SocioProphet/prophet-workspace`:
 
 - `ProfessionalWorkroom`
 - `OfficeArtifact`
@@ -137,11 +145,17 @@ Backends are modeled as an abstraction:
 - Microsoft Graph / Office 365 and Google Workspace: compatibility adapters, not core authority.
 - SourceOS-native: future native document surfaces.
 
-The CLI does not create, convert, or modify files yet. It renders plans and inspects artifacts/evidence. Email sending and external publishing remain policy-gated side effects and are not enabled here.
+Guarded Office execution is intentionally narrow:
+
+- `office generate --execute --policy-ok` currently writes only `txt`, `md`, or `json` artifacts.
+- Office binary generation (`docx`, `xlsx`, `pptx`, `odt`, `ods`, `odp`) remains disabled until template/render backends are hardened.
+- `office convert --execute --policy-ok` uses local LibreOffice/`soffice` when available.
+- All guarded Office execution emits or writes `OfficeArtifactEvidence`.
+- Email sending, external publishing, and calendar modification remain policy-gated side effects and are not enabled here.
 
 ### Design constraints
 
-All commands in the current surface are **read-only or dry-run**. No mutating command is implemented. Commands that would mutate host state are explicitly rejected at runtime.
+All mutating commands require `--execute --policy-ok`. Commands that would mutate host state without both flags are rejected at runtime.
 
 ## First milestone
 
