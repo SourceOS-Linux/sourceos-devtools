@@ -18,6 +18,7 @@ It should contain:
 - model-router client utilities;
 - guardrail/eval/evidence helpers;
 - agent sandbox/run helpers;
+- Local Model Door runtime detection and route planning helpers;
 - Agent Machine local mount and secure host-interface helpers;
 - Office Plane dry-run, guarded execution, inspection, and evidence helpers;
 - fingerprint and proof bundle tools;
@@ -60,6 +61,11 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl fingerprint collect --dry-run` | Print environment fingerprint fields (dry-run only) |
 | `sourceosctl ai labs list` | List available AI labs (read-only) |
 | `sourceosctl agents sandbox plan --dry-run` | Print agent sandbox plan (dry-run only) |
+| `sourceosctl local-model doctor` | Inspect local model runtime and installed models without pulling weights or inference |
+| `sourceosctl local-model profiles` | List SourceOS Local Model Door profile refs |
+| `sourceosctl local-model plan --profile local-llama32-1b` | Render local model runtime plan without installing or running models |
+| `sourceosctl local-model route --task-class office-assist` | Render hash-only model route decision under local-first policy |
+| `sourceosctl local-model evidence inspect <path>` | Inspect local model route evidence JSON |
 | `sourceosctl agent-machine mounts plan` | Render Agent Machine local mount plan for dev/docs/downloads roots (dry-run) |
 | `sourceosctl agent-machine mounts init --dry-run` | Render mount initialization plan; no directories or mounts are created |
 | `sourceosctl agent-machine mounts init --execute --policy-ok` | Create only scoped local output/download directories and emit AgentMachineMountEvidence |
@@ -89,6 +95,10 @@ python3 bin/sourceosctl release inspect-archive fixtures/nlboot_release_valid
 python3 bin/sourceosctl fingerprint collect --dry-run
 python3 bin/sourceosctl ai labs list
 python3 bin/sourceosctl agents sandbox plan --dry-run
+python3 bin/sourceosctl local-model doctor
+python3 bin/sourceosctl local-model profiles
+python3 bin/sourceosctl local-model plan --profile local-llama32-1b
+python3 bin/sourceosctl local-model route --task-class office-assist --prompt "local prompt text is hashed only"
 python3 bin/sourceosctl agent-machine mounts plan
 python3 bin/sourceosctl agent-machine mounts init --dry-run
 python3 bin/sourceosctl agent-machine mounts init --execute --policy-ok --evidence-out ./mount-evidence.json
@@ -103,6 +113,24 @@ python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type sl
 python3 bin/sourceosctl office convert ./example.docx --to pdf --dry-run
 python3 bin/sourceosctl office convert ./example.docx --to pdf --execute --policy-ok --evidence-out ./office-convert-evidence.json
 ```
+
+### Local Model Door defaults
+
+The Local Model Door aligns with:
+
+- `SourceOS-Linux/sourceos-model-carry` for local model profiles;
+- `SocioProphet/model-router` for routing;
+- `SocioProphet/model-governance-ledger` for personal tuning contracts;
+- `SociOS-Linux/socios` for opt-in personalization orchestration.
+
+Default profiles:
+
+| Profile key | Model | Role |
+| --- | --- | --- |
+| `local-llama32-1b` | `llama3.2:1b` | laptop-safe router, triage, summarization, rewrite, Office assist |
+| `local-llama32-3b` | `llama3.2:3b` | quality local fallback |
+
+The Local Model Door does **not** pull model weights, start Ollama, run inference, send prompts off-device, or authorize tool use. `local-model route --prompt ...` emits only a SHA-256 prompt hash.
 
 ### Agent Machine local mount defaults
 
@@ -178,13 +206,15 @@ M1 is repo maturity and install surface definition:
 - `SociOS-Linux/nlboot`: boot/recovery client and evidence records.
 - `SourceOS-Linux/sourceos-spec`: canonical SourceOS schemas and contracts.
 - `SourceOS-Linux/sourceos-boot`: SourceOS boot/recovery integration.
+- `SourceOS-Linux/sourceos-model-carry`: local model profiles and carry-layer service refs.
 - `SourceOS-Linux/agent-term`: terminal-native SourceOS operator ChatOps console.
 - `SociOS-Linux/workstation-contracts`: workstation/CI conformance contracts and IPC receipts.
+- `SociOS-Linux/socios`: opt-in automation and personalization orchestration.
 - `SocioProphet/prophet-workspace`: workspace product semantics, Professional Workrooms, and OfficeArtifact contracts.
 - `SocioProphet/homebrew-prophet`: Homebrew install formulae.
 - `SocioProphet/model-router`: governed model/service routing.
 - `SocioProphet/guardrail-fabric`: guardrail policy client integration.
-- `SocioProphet/model-governance-ledger`: evidence and promotion records.
+- `SocioProphet/model-governance-ledger`: evidence, consent, evaluation, promotion, and personalization governance records.
 - `SocioProphet/agent-registry`: governed agent identity/tool-grant contracts.
 - `SocioProphet/agentplane`: governed execution, placement, run, replay, and evidence.
 
