@@ -273,7 +273,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--execute",
         action="store_true",
         default=False,
-        help="Write txt/md/json artifacts only; Office binary generation remains disabled",
+        help="Write txt/md/json/docx/xlsx/pptx artifacts under guarded local execution",
     )
     office_generate_p.add_argument(
         "--policy-ok",
@@ -319,6 +319,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path to write OfficeArtifactEvidence JSON",
     )
     office_convert_p.set_defaults(func=office.convert)
+
+    office_validate_p = office_sub.add_parser(
+        "validate", help="Run Office artifact quality gates"
+    )
+    office_validate_p.add_argument("path", help="Path to Office artifact file")
+    office_validate_p.add_argument("--format", default=None, help="Override detected artifact format")
+    office_validate_p.add_argument(
+        "--roundtrip",
+        action="store_true",
+        default=False,
+        help="Attempt a LibreOffice PDF round-trip validation when available",
+    )
+    office_validate_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm Policy Fabric/operator approval for round-trip execution",
+    )
+    office_validate_p.add_argument(
+        "--workroom-id", default="workroom-local-default", help="Professional Workroom id"
+    )
+    office_validate_p.add_argument(
+        "--evidence-out", default=None, help="Optional path to write OfficeArtifactEvidence JSON"
+    )
+    office_validate_p.set_defaults(func=office.validate)
 
     office_inspect_p = office_sub.add_parser("inspect", help="Inspect an Office artifact file")
     office_inspect_p.add_argument("path", help="Path to Office artifact file")
