@@ -163,7 +163,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_mount_common(mounts_plan_p)
     mounts_plan_p.set_defaults(func=agent_machine.mounts_plan)
 
-    mounts_init_p = mounts_sub.add_parser("init", help="Render mount initialization plan (dry-run only)")
+    mounts_init_p = mounts_sub.add_parser(
+        "init", help="Render or execute guarded local directory materialization"
+    )
     add_mount_common(mounts_init_p)
     mounts_init_p.add_argument(
         "--dry-run",
@@ -171,6 +173,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
         dest="dry_run",
         help="Print plan without creating directories or mounts (default: True)",
+    )
+    mounts_init_p.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Create only explicitly-scoped output/download directories; does not create Podman mounts",
+    )
+    mounts_init_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm Policy Fabric/operator approval for guarded local materialization",
+    )
+    mounts_init_p.add_argument(
+        "--evidence-out",
+        default=None,
+        help="Optional path to write AgentMachineMountEvidence JSON",
     )
     mounts_init_p.set_defaults(func=agent_machine.mounts_init)
 
@@ -236,7 +255,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_office_common(office_plan_p)
     office_plan_p.set_defaults(func=office.plan)
 
-    office_generate_p = office_sub.add_parser("generate", help="Render Office generation plan (dry-run only)")
+    office_generate_p = office_sub.add_parser(
+        "generate", help="Render or execute guarded Office text/Markdown/JSON generation"
+    )
     add_office_common(office_generate_p)
     office_generate_p.add_argument("--template", default=None, help="Optional template reference")
     office_generate_p.add_argument("--prompt-ref", default=None, help="Optional prompt/context reference")
@@ -248,9 +269,28 @@ def build_parser() -> argparse.ArgumentParser:
         dest="dry_run",
         help="Print generation plan without writing files (default: True)",
     )
+    office_generate_p.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Write txt/md/json artifacts only; Office binary generation remains disabled",
+    )
+    office_generate_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm Policy Fabric/operator approval for guarded Office generation",
+    )
+    office_generate_p.add_argument(
+        "--evidence-out",
+        default=None,
+        help="Optional path to write OfficeArtifactEvidence JSON",
+    )
     office_generate_p.set_defaults(func=office.generate)
 
-    office_convert_p = office_sub.add_parser("convert", help="Render Office conversion plan (dry-run only)")
+    office_convert_p = office_sub.add_parser(
+        "convert", help="Render or execute guarded LibreOffice conversion"
+    )
     office_convert_p.add_argument("input", help="Input Office artifact path")
     office_convert_p.add_argument("--to", required=True, help="Target format, e.g. pdf, docx, pptx")
     add_office_common(office_convert_p)
@@ -260,6 +300,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
         dest="dry_run",
         help="Print conversion plan without writing files (default: True)",
+    )
+    office_convert_p.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Run LibreOffice conversion under guarded local execution",
+    )
+    office_convert_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm Policy Fabric/operator approval for guarded Office conversion",
+    )
+    office_convert_p.add_argument(
+        "--evidence-out",
+        default=None,
+        help="Optional path to write OfficeArtifactEvidence JSON",
     )
     office_convert_p.set_defaults(func=office.convert)
 
