@@ -69,6 +69,7 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl office plan` | Render an OfficeArtifact-compatible workroom artifact plan |
 | `sourceosctl office generate --dry-run` | Render an Office generation plan without writing files |
 | `sourceosctl office generate --execute --policy-ok --format md|txt|json` | Write a guarded text/Markdown/JSON artifact and emit OfficeArtifactEvidence |
+| `sourceosctl office generate --execute --policy-ok --format docx|xlsx|pptx` | Write a guarded minimal OOXML artifact and emit OfficeArtifactEvidence |
 | `sourceosctl office convert <path> --to <format> --dry-run` | Render a LibreOffice-style conversion plan without writing files |
 | `sourceosctl office convert <path> --to <format> --execute --policy-ok` | Run guarded local LibreOffice conversion and emit OfficeArtifactEvidence |
 | `sourceosctl office inspect <path>` | Inspect a local office artifact file and hash it |
@@ -96,6 +97,9 @@ python3 bin/sourceosctl office doctor
 python3 bin/sourceosctl office plan --artifact-type slide-deck --format pptx --title "Demo Deck"
 python3 bin/sourceosctl office generate --dry-run --artifact-type document --format docx --title "Demo Report"
 python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type document --format md --title "Demo Report" --evidence-out ./office-evidence.json
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type document --format docx --title "Demo Report" --evidence-out ./office-docx-evidence.json
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type spreadsheet --format xlsx --title "Demo Workbook" --evidence-out ./office-xlsx-evidence.json
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type slide-deck --format pptx --title "Demo Deck" --evidence-out ./office-pptx-evidence.json
 python3 bin/sourceosctl office convert ./example.docx --to pdf --dry-run
 python3 bin/sourceosctl office convert ./example.docx --to pdf --execute --policy-ok --evidence-out ./office-convert-evidence.json
 ```
@@ -145,10 +149,11 @@ Backends are modeled as an abstraction:
 - Microsoft Graph / Office 365 and Google Workspace: compatibility adapters, not core authority.
 - SourceOS-native: future native document surfaces.
 
-Guarded Office execution is intentionally narrow:
+Guarded Office execution is intentionally bounded:
 
-- `office generate --execute --policy-ok` currently writes only `txt`, `md`, or `json` artifacts.
-- Office binary generation (`docx`, `xlsx`, `pptx`, `odt`, `ods`, `odp`) remains disabled until template/render backends are hardened.
+- `office generate --execute --policy-ok` writes `txt`, `md`, `json`, `docx`, `xlsx`, or `pptx` artifacts.
+- DOCX/XLSX/PPTX generation uses a minimal dependency-light OOXML bootstrap builder, not a full template or collaboration engine.
+- ODT/ODS/ODP and other binary formats remain conversion/backend territory until LibreOffice/Collabora/ONLYOFFICE template backends are hardened.
 - `office convert --execute --policy-ok` uses local LibreOffice/`soffice` when available.
 - All guarded Office execution emits or writes `OfficeArtifactEvidence`.
 - Email sending, external publishing, and calendar modification remain policy-gated side effects and are not enabled here.
