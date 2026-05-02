@@ -297,6 +297,10 @@ def mounts_init(args) -> int:
     execute = bool(getattr(args, "execute", False))
     policy_ok = bool(getattr(args, "policy_ok", False))
 
+    if getattr(args, "dry_run", True) is False and not execute:
+        print("error: non-dry-run mount initialization requires --execute", file=sys.stderr)
+        return 1
+
     plan = _build_mount_plan(args)
     plan["operation"] = "init"
     errors = _validate_mount_plan(plan)
