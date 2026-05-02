@@ -1,20 +1,46 @@
-"""Minimal OOXML artifact builders for SourceOS Office Plane.
+"""Minimal OOXML artifact builders and validators for SourceOS Office Plane.
 
 These helpers intentionally use only Python's standard library.  They create
 small, deterministic-enough DOCX/XLSX/PPTX ZIP packages for guarded local
-artifact generation.  They are not a replacement for LibreOffice, Collabora,
-ONLYOFFICE, or a full template engine; they are the safe local bootstrap path
-for simple agent-authored workroom artifacts.
+artifact generation and validate required OOXML package structure for quality
+gates. They are not a replacement for LibreOffice, Collabora, ONLYOFFICE, or a
+full template engine; they are the safe local bootstrap path for simple
+agent-authored workroom artifacts.
 """
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from html import escape
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
 
 OOXML_GENERATION_FORMATS = {"docx", "xlsx", "pptx"}
+
+REQUIRED_PARTS = {
+    "docx": ["[Content_Types].xml", "_rels/.rels", "word/document.xml"],
+    "xlsx": [
+        "[Content_Types].xml",
+        "_rels/.rels",
+        "xl/workbook.xml",
+        "xl/_rels/workbook.xml.rels",
+        "xl/worksheets/sheet1.xml",
+    ],
+    "pptx": [
+        "[Content_Types].xml",
+        "_rels/.rels",
+        "ppt/presentation.xml",
+        "ppt/_rels/presentation.xml.rels",
+        "ppt/slides/slide1.xml",
+    ],
+}
+
+ROOT_PARTS = {
+    "docx": "word/document.xml",
+    "xlsx": "xl/workbook.xml",
+    "pptx": "ppt/presentation.xml",
+}
 
 
 def _xml(text: str) -> str:
@@ -55,6 +81,55 @@ def write_ooxml_artifact(
         _write_pptx(path=path, title=title, workroom_id=workroom_id, artifact_id=artifact_id)
         return
     raise ValueError(f"unsupported OOXML generation format: {fmt}")
+
+
+def validate_ooxml_artifact(path: Path, fmt: str | None = None) -> dict:
+    """Validate basic OOXML ZIP/package structure.
+
+    This is a structural quality gate, not a complete ECMA-376 validator. It
+    checks that the artifact is a ZIP package, required parts exist, and XML
+    parts parse successfully.
+    """
+    fmt = fmt or path.suffix.lower().lstrip(".")
+    result = {
+        "kind": "OOXMLStructuralValidation",
+        "format": fmt,
+        "path": str(path),
+        "valid": False,
+        "requiredParts": REQUIRED_PARTS.get(fmt, []),
+        "missingParts": [],
+        "xmlErrors": [],
+        "zipEntries": [],
+    }
+
+    if fmt not in REQUIRED_PARTS:
+        result["xmlErrors"].append(f"unsupported OOXML format: {fmt}")
+        return result
+
+    if not path.exists() or not path.is_file():
+        result["xmlErrors"].append("artifact does not exist or is not a file")
+        return result
+
+    try:
+        with ZipFile(path, "r") as zf:
+            names = sorted(zf.namelist())
+            result["zipEntries"] = names
+            for required in REQUIRED_PARTS[fmt]:
+                if required not in names:
+                    result["missingParts"].append(required)
+            for name in names:
+                if not name.endswith(".xml") and not name.endswith(".rels"):
+                    continue
+                try:
+                    ET.fromstring(zf.read(name))
+                except ET.ParseError as exc:
+                    result["xmlErrors"].append(f"{name}: {exc}")
+    except BadZipFile:
+        result["xmlErrors"].append("artifact is not a valid ZIP package")
+        return result
+
+    result["valid"] = not result["missingParts"] and not result["xmlErrors"]
+    return result
 
 
 def _write_docx(*, path: Path, title: str, workroom_id: str, artifact_id: str) -> None:
