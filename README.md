@@ -19,6 +19,7 @@ It should contain:
 - guardrail/eval/evidence helpers;
 - agent sandbox/run helpers;
 - Agent Machine local mount and secure host-interface helpers;
+- Office Plane dry-run, inspection, and evidence helpers;
 - fingerprint and proof bundle tools;
 - local-to-mesh registration helpers;
 - release/operator install scripts.
@@ -63,6 +64,12 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl agent-machine mounts init --dry-run` | Render mount initialization plan; no directories or mounts are created |
 | `sourceosctl agent-machine mounts inspect [--include-downloads]` | Inspect default/local Agent Machine mount posture |
 | `sourceosctl agent-machine mounts evidence inspect <path>` | Inspect Agent Machine mount evidence JSON (read-only) |
+| `sourceosctl office doctor` | Inspect local Office Plane backend availability, including LibreOffice detection |
+| `sourceosctl office plan` | Render an OfficeArtifact-compatible workroom artifact plan |
+| `sourceosctl office generate --dry-run` | Render an Office generation plan without writing files |
+| `sourceosctl office convert <path> --to <format> --dry-run` | Render a LibreOffice-style conversion plan without writing files |
+| `sourceosctl office inspect <path>` | Inspect a local office artifact file and hash it |
+| `sourceosctl office evidence inspect <path>` | Inspect Office Plane evidence JSON (read-only) |
 
 ### Running from the repo
 
@@ -81,6 +88,10 @@ python3 bin/sourceosctl agents sandbox plan --dry-run
 python3 bin/sourceosctl agent-machine mounts plan
 python3 bin/sourceosctl agent-machine mounts init --dry-run
 python3 bin/sourceosctl agent-machine mounts inspect --include-downloads
+python3 bin/sourceosctl office doctor
+python3 bin/sourceosctl office plan --artifact-type slide-deck --format pptx --title "Demo Deck"
+python3 bin/sourceosctl office generate --dry-run --artifact-type document --format docx --title "Demo Report"
+python3 bin/sourceosctl office convert ./example.docx --to pdf --dry-run
 ```
 
 ### Agent Machine local mount defaults
@@ -102,6 +113,31 @@ Default host roots:
 The CLI does **not** mount `$HOME` wholesale and does **not** expose `.ssh`, `.gnupg`, browser profiles, keychains, cloud credential directories, token stores, or password stores by default.
 
 TopoLVM is treated as a Linux cluster-local backend profile for the same logical mount contract. It is not used for macOS/APFS local mode and it is not represented as cross-node shared storage.
+
+### Office Plane local defaults
+
+The first Office Plane slice is dry-run/read-only. It aligns with `SocioProphet/prophet-workspace`:
+
+- `ProfessionalWorkroom`
+- `OfficeArtifact`
+
+Default paths:
+
+| Purpose | Host path | Agent path |
+| --- | --- | --- |
+| Workroom output | `~/Documents/SourceOS/agent-output` | `/workspace/output` |
+| Browser downloads | `~/Downloads/SourceOS/agent-downloads` | `/workspace/downloads` |
+| Code/templates | `~/dev` | `/workspace/dev` |
+
+Backends are modeled as an abstraction:
+
+- LibreOffice: local-first default for headless generation, inspection, render, and conversion.
+- Collabora: future browser-collaboration / WOPI-style backend.
+- ONLYOFFICE: future optional document-builder/editor backend.
+- Microsoft Graph / Office 365 and Google Workspace: compatibility adapters, not core authority.
+- SourceOS-native: future native document surfaces.
+
+The CLI does not create, convert, or modify files yet. It renders plans and inspects artifacts/evidence. Email sending and external publishing remain policy-gated side effects and are not enabled here.
 
 ### Design constraints
 
@@ -125,6 +161,7 @@ M1 is repo maturity and install surface definition:
 - `SourceOS-Linux/sourceos-boot`: SourceOS boot/recovery integration.
 - `SourceOS-Linux/agent-term`: terminal-native SourceOS operator ChatOps console.
 - `SociOS-Linux/workstation-contracts`: workstation/CI conformance contracts and IPC receipts.
+- `SocioProphet/prophet-workspace`: workspace product semantics, Professional Workrooms, and OfficeArtifact contracts.
 - `SocioProphet/homebrew-prophet`: Homebrew install formulae.
 - `SocioProphet/model-router`: governed model/service routing.
 - `SocioProphet/guardrail-fabric`: guardrail policy client integration.
