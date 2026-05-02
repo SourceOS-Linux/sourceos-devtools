@@ -12,7 +12,7 @@ _REPO_ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 from sourceosctl.cli import build_parser, main
-from sourceosctl.commands import doctor, profiles, nlboot, release, fingerprint, ai, agents
+from sourceosctl.commands import doctor, profiles, nlboot, release, fingerprint, ai, agents, agent_machine
 
 
 FIXTURES = _REPO_ROOT / "fixtures"
@@ -251,6 +251,95 @@ class TestAgents(unittest.TestCase):
     def test_agents_sandbox_plan_via_main(self):
         rc = main(["agents", "sandbox", "plan", "--dry-run"])
         self.assertEqual(rc, 0)
+
+
+class TestAgentMachineMounts(unittest.TestCase):
+    def test_mounts_plan_direct(self):
+        args = _Args(
+            profile="macos-podman",
+            dev_root="~/dev",
+            docs_root="~/Documents/SourceOS/agent-output",
+            downloads_root="~/Downloads/SourceOS/agent-downloads",
+        )
+        result = agent_machine.mounts_plan(args)
+        self.assertEqual(result, 0)
+
+    def test_mounts_plan_via_main(self):
+        rc = main([
+            "agent-machine",
+            "mounts",
+            "plan",
+            "--profile",
+            "macos-podman",
+            "--dev-root",
+            "~/dev",
+            "--docs-root",
+            "~/Documents/SourceOS/agent-output",
+            "--downloads-root",
+            "~/Downloads/SourceOS/agent-downloads",
+        ])
+        self.assertEqual(rc, 0)
+
+    def test_mounts_init_dry_run_via_main(self):
+        rc = main([
+            "agent-machine",
+            "mounts",
+            "init",
+            "--dry-run",
+        ])
+        self.assertEqual(rc, 0)
+
+    def test_mounts_init_no_dry_run_rejected(self):
+        args = _Args(
+            dry_run=False,
+            profile="macos-podman",
+            dev_root="~/dev",
+            docs_root="~/Documents/SourceOS/agent-output",
+            downloads_root="~/Downloads/SourceOS/agent-downloads",
+        )
+        result = agent_machine.mounts_init(args)
+        self.assertEqual(result, 1)
+
+    def test_mounts_inspect_omits_downloads_by_default(self):
+        rc = main(["agent-machine", "mounts", "inspect"])
+        self.assertEqual(rc, 0)
+
+    def test_mounts_inspect_include_downloads(self):
+        rc = main(["agent-machine", "mounts", "inspect", "--include-downloads"])
+        self.assertEqual(rc, 0)
+
+    def test_mounts_evidence_inspect_valid(self):
+        payload = {
+            "type": "AgentMachineMountEvidence",
+            "workspaceId": "urn:srcos:agent-machine-workspace:test",
+            "policyHash": "sha256:example",
+            "mounts": [
+                {"mountId": "dev-root", "pathClass": "code"},
+                {"mountId": "browser-downloads", "pathClass": "downloads"},
+            ],
+        }
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump(payload, f)
+            tmp_path = f.name
+        try:
+            rc = main(["agent-machine", "mounts", "evidence", "inspect", tmp_path])
+            self.assertEqual(rc, 0)
+        finally:
+            os.unlink(tmp_path)
+
+    def test_mounts_evidence_inspect_missing(self):
+        rc = main(["agent-machine", "mounts", "evidence", "inspect", "/nonexistent/mount-evidence.json"])
+        self.assertEqual(rc, 1)
+
+    def test_mounts_evidence_inspect_bad_json(self):
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            f.write("bad json")
+            tmp_path = f.name
+        try:
+            rc = main(["agent-machine", "mounts", "evidence", "inspect", tmp_path])
+            self.assertEqual(rc, 1)
+        finally:
+            os.unlink(tmp_path)
 
 
 if __name__ == "__main__":
