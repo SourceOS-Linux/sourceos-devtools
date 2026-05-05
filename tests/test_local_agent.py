@@ -1,5 +1,6 @@
 """Unit tests for SourceOS local-agent runtime CLI scaffold."""
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -30,9 +31,25 @@ class TestLocalAgentParser(unittest.TestCase):
         rc = local_agent.main(["quarantine", "node-commander"])
         self.assertEqual(rc, 0)
 
-    def test_mutating_command_refuses_partial_scaffold_with_execute_policy_ok(self):
-        rc = local_agent.main(["quarantine", "node-commander", "--execute", "--policy-ok"])
-        self.assertEqual(rc, 1)
+    def test_quarantine_executes_with_execute_and_policy_ok(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(local_agent, "collect_checks", return_value=[]), \
+                mock.patch.object(local_agent, "_capture_launchd", return_value=[]), \
+                mock.patch.object(local_agent, "_capture_podman", return_value=[]), \
+                mock.patch.object(local_agent, "_capture_redacted_auth", return_value=[]):
+                rc = local_agent.main([
+                    "quarantine",
+                    "node-commander",
+                    "--execute",
+                    "--policy-ok",
+                    "--output-dir",
+                    tmp,
+                ])
+            self.assertEqual(rc, 0)
+            dirs = list(pathlib.Path(tmp).glob("node-commander-*"))
+            self.assertEqual(len(dirs), 1)
+            self.assertTrue((dirs[0] / "manifest.json").exists())
+            self.assertTrue((dirs[0] / "remediation.md").exists())
 
 
 class TestLocalAgentChecks(unittest.TestCase):
@@ -62,6 +79,14 @@ class TestLocalAgentChecks(unittest.TestCase):
         args = parser.parse_args(["install", "node-commander", "--execute"])
         self.assertTrue(args.execute)
         self.assertFalse(args.policy_ok)
+
+    def test_redacted_json_masks_auth(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+            json.dump({"auths": {"example.com": {"auth": "secret"}}}, f)
+            f.flush()
+            redacted = local_agent._redacted_json(pathlib.Path(f.name))
+        self.assertIn("<redacted>", redacted)
+        self.assertNotIn("secret", redacted)
 
 
 if __name__ == "__main__":
