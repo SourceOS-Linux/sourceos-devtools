@@ -19,6 +19,19 @@ if len(sys.argv) > 1 and sys.argv[1] == "native-assistant":
 
     sys.exit(native_assistant_main(sys.argv[2:]))
 
+if len(sys.argv) > 1 and sys.argv[1] == "local-agent":
+    from sourceosctl.commands.local_agent import main as local_agent_main
+
+    sys.exit(local_agent_main(sys.argv[2:]))
+
+if len(sys.argv) > 2 and sys.argv[1:3] == ["doctor", "local-runtime"]:
+    from sourceosctl.commands.local_agent import local_runtime_doctor
+
+    class _Args:
+        pass
+
+    sys.exit(local_runtime_doctor(_Args()))
+
 from sourceosctl.cli import main
 
 sys.exit(main())
