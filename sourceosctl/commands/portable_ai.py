@@ -12,13 +12,16 @@ import json
 import os
 import platform
 import shutil
-import stat
+import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict
 
 
 PORTABLE_LAYOUT_VERSION = "sourceos.portable-ai/v1alpha1"
+BENCHMARK_SIZE_MB = 8
 
 PORTABLE_PROFILES: dict[str, dict[str, Any]] = {
     "tiny-router": {
@@ -94,6 +97,30 @@ PORTABLE_DIRS = [
     "tmp",
 ]
 
+LARGE_FILE_SAFE_FSTYPES = {
+    "apfs",
+    "btrfs",
+    "exfat",
+    "ext2",
+    "ext3",
+    "ext4",
+    "f2fs",
+    "hfs",
+    "hfs+",
+    "ntfs",
+    "ufs",
+    "xfs",
+    "zfs",
+}
+
+LARGE_FILE_BLOCKING_FSTYPES = {
+    "fat",
+    "fat16",
+    "fat32",
+    "msdos",
+    "vfat",
+}
+
 
 def _now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
@@ -108,8 +135,19 @@ def _target(path_value: str) -> Path:
     return Path(path_value).expanduser().resolve()
 
 
+def _probe_path(path: Path) -> Path:
+    return path if path.exists() else path.parent
+
+
+def _run(args: list[str], timeout: int = 3) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(args, check=False, capture_output=True, text=True, timeout=timeout)
+    except Exception:
+        return None
+
+
 def _disk_usage_gb(path: Path) -> dict[str, float | None]:
-    probe = path if path.exists() else path.parent
+    probe = _probe_path(path)
     try:
         total, used, free = shutil.disk_usage(probe)
     except FileNotFoundError:
@@ -123,17 +161,153 @@ def _disk_usage_gb(path: Path) -> dict[str, float | None]:
 
 
 def _writable(path: Path) -> bool:
-    probe = path if path.exists() else path.parent
+    probe = _probe_path(path)
     return probe.exists() and os.access(probe, os.W_OK)
 
 
-def _large_file_warning(path: Path) -> str | None:
-    # Python's stdlib does not expose portable fs type for every platform.
-    # Keep this conservative; Linux/macOS launchers can add richer fs probing.
-    name = str(path).lower()
-    if "fat32" in name or "vfat" in name:
-        return "target path appears to reference FAT32/VFAT; GGUF files larger than 4GB may fail"
-    return None
+def _host_facts() -> dict[str, Any]:
+    ram_gb: float | None = None
+    try:
+        if hasattr(os, "sysconf"):
+            pages = os.sysconf("SC_PHYS_PAGES")
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            ram_gb = round((pages * page_size) / (1024 ** 3), 2)
+    except Exception:
+        ram_gb = None
+
+    return {
+        "system": platform.system(),
+        "machine": platform.machine(),
+        "processor": platform.processor() or None,
+        "platform": platform.platform(),
+        "pythonVersion": platform.python_version(),
+        "cpuCount": os.cpu_count(),
+        "ramGb": ram_gb,
+    }
+
+
+def _linux_block_details(source: str | None) -> dict[str, Any]:
+    details: dict[str, Any] = {
+        "baseDevice": None,
+        "transport": None,
+        "removableFlag": None,
+        "model": None,
+        "vendor": None,
+    }
+    if not source or not source.startswith("/dev/"):
+        return details
+
+    pk = _run(["lsblk", "-ndo", "PKNAME", source])
+    base_name = pk.stdout.strip().splitlines()[0] if pk and pk.stdout.strip() else Path(source).name
+    base = f"/dev/{base_name}" if not base_name.startswith("/dev/") else base_name
+    details["baseDevice"] = base
+
+    for key, column in [
+        ("transport", "TRAN"),
+        ("removableFlag", "RM"),
+        ("model", "MODEL"),
+        ("vendor", "VENDOR"),
+    ]:
+        result = _run(["lsblk", "-ndo", column, base])
+        value = result.stdout.strip().splitlines()[0] if result and result.stdout.strip() else None
+        details[key] = value
+    return details
+
+
+def _darwin_block_details(source: str | None) -> dict[str, Any]:
+    details: dict[str, Any] = {
+        "baseDevice": source,
+        "transport": None,
+        "removableFlag": None,
+        "model": None,
+        "vendor": None,
+    }
+    if not source or not source.startswith("/dev/"):
+        return details
+
+    result = _run(["diskutil", "info", source])
+    if not result or result.returncode != 0:
+        return details
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("Protocol:"):
+            details["transport"] = line.split(":", 1)[1].strip()
+        elif line.startswith("Removable Media:"):
+            details["removableFlag"] = line.split(":", 1)[1].strip()
+        elif line.startswith("Device / Media Name:"):
+            details["model"] = line.split(":", 1)[1].strip()
+    return details
+
+
+def _mount_info(path: Path) -> dict[str, Any]:
+    probe = _probe_path(path)
+    info: dict[str, Any] = {
+        "probePath": str(probe),
+        "source": None,
+        "fsType": None,
+        "options": None,
+        "readOnly": None,
+        "largeFileSupport": "unknown",
+        "largeFileReason": "filesystem type unavailable",
+        "removableConfidence": "unknown",
+        "block": {},
+    }
+
+    system = platform.system()
+    if system == "Linux" and shutil.which("findmnt"):
+        result = _run(["findmnt", "-n", "-T", str(probe), "-o", "SOURCE,FSTYPE,OPTIONS"])
+        if result and result.returncode == 0 and result.stdout.strip():
+            parts = result.stdout.strip().split(maxsplit=2)
+            if len(parts) >= 1:
+                info["source"] = parts[0]
+            if len(parts) >= 2:
+                info["fsType"] = parts[1].lower()
+            if len(parts) >= 3:
+                info["options"] = parts[2]
+    elif system == "Darwin":
+        df = _run(["df", "-P", str(probe)])
+        if df and df.returncode == 0:
+            lines = [line for line in df.stdout.splitlines() if line.strip()]
+            if len(lines) >= 2:
+                info["source"] = lines[1].split()[0]
+        mount = _run(["mount"])
+        if mount and mount.returncode == 0 and info.get("source"):
+            for line in mount.stdout.splitlines():
+                if line.startswith(str(info["source"]) + " on "):
+                    if "(" in line and ")" in line:
+                        opts = line.rsplit("(", 1)[1].rstrip(")")
+                        bits = [bit.strip() for bit in opts.split(",")]
+                        info["fsType"] = bits[0].lower() if bits else None
+                        info["options"] = ",".join(bits[1:]) if len(bits) > 1 else None
+                    break
+
+    opts = str(info.get("options") or "")
+    if opts:
+        info["readOnly"] = "ro" in {part.strip().lower() for part in opts.split(",")}
+
+    fs_type = str(info.get("fsType") or "").lower()
+    if fs_type in LARGE_FILE_BLOCKING_FSTYPES:
+        info["largeFileSupport"] = "blocked"
+        info["largeFileReason"] = f"{fs_type} has a practical 4GB per-file limit"
+    elif fs_type in LARGE_FILE_SAFE_FSTYPES:
+        info["largeFileSupport"] = "ok"
+        info["largeFileReason"] = f"{fs_type} supports large model files"
+
+    if system == "Linux":
+        block = _linux_block_details(info.get("source"))
+    elif system == "Darwin":
+        block = _darwin_block_details(info.get("source"))
+    else:
+        block = {}
+    info["block"] = block
+
+    transport = str(block.get("transport") or "").lower()
+    removable = str(block.get("removableFlag") or "").lower()
+    if transport == "usb" or removable in {"1", "yes", "removable"}:
+        info["removableConfidence"] = "high"
+    elif info.get("source"):
+        info["removableConfidence"] = "low"
+    return info
 
 
 def _runtime_paths() -> dict[str, str | None]:
@@ -142,6 +316,53 @@ def _runtime_paths() -> dict[str, str | None]:
         "llama-cpp": shutil.which("llama-server") or shutil.which("llama.cpp"),
         "python3": shutil.which("python3"),
     }
+
+
+def _benchmark(path: Path, size_mb: int = BENCHMARK_SIZE_MB) -> dict[str, Any]:
+    probe = _probe_path(path)
+    result: dict[str, Any] = {
+        "requested": True,
+        "performed": False,
+        "sizeMb": size_mb,
+        "writeMBps": None,
+        "readMBps": None,
+        "tempFileRemoved": False,
+        "error": None,
+    }
+    if not probe.exists() or not os.access(probe, os.W_OK):
+        result["error"] = "benchmark target is not writable"
+        return result
+
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".sourceos_portable_ai_bench_", suffix=".tmp", dir=str(probe), delete=False) as handle:
+            tmp_path = handle.name
+            chunk = b"0" * (1024 * 1024)
+            start = time.perf_counter()
+            for _ in range(size_mb):
+                handle.write(chunk)
+            handle.flush()
+            os.fsync(handle.fileno())
+            elapsed = max(time.perf_counter() - start, 1e-9)
+            result["writeMBps"] = round(size_mb / elapsed, 2)
+
+        start = time.perf_counter()
+        with open(tmp_path, "rb") as handle:
+            while handle.read(1024 * 1024):
+                pass
+        elapsed = max(time.perf_counter() - start, 1e-9)
+        result["readMBps"] = round(size_mb / elapsed, 2)
+        result["performed"] = True
+    except Exception as exc:  # pragma: no cover - defensive around host IO
+        result["error"] = str(exc)
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+                result["tempFileRemoved"] = True
+            except OSError:
+                result["tempFileRemoved"] = False
+    return result
 
 
 def _profile(name: str) -> dict[str, Any]:
@@ -171,7 +392,8 @@ def profiles(args) -> int:
 def preflight(args) -> int:
     target = _target(args.target_root)
     usage = _disk_usage_gb(target)
-    warning = _large_file_warning(target)
+    mount = _mount_info(target)
+    host = _host_facts()
     runtime_paths = _runtime_paths()
     exists = target.exists()
     writable = _writable(target)
@@ -183,12 +405,48 @@ def preflight(args) -> int:
         failures.append("target parent does not exist")
     if not writable:
         failures.append("target or parent is not writable")
-    if warning:
-        warnings.append(warning)
+    if mount.get("readOnly") is True:
+        failures.append("target mount is read-only")
+    if mount.get("largeFileSupport") == "blocked":
+        failures.append(str(mount.get("largeFileReason")))
+    elif mount.get("largeFileSupport") == "unknown":
+        warnings.append("large-file support could not be confirmed")
+    if mount.get("removableConfidence") == "low":
+        warnings.append("target does not appear to be removable USB media; proceed only if this is an approved portable SSD/root")
+
     if free_gb is not None and free_gb < 8:
         failures.append("less than 8GB free; no built-in portable profile can be prepared safely")
     elif free_gb is not None and free_gb < 16:
         warnings.append("less than 16GB free; only tiny-router or small BYOM profiles are realistic")
+
+    ram_gb = host.get("ramGb")
+    if isinstance(ram_gb, (int, float)):
+        if ram_gb < 8:
+            warnings.append("host RAM is below 8GB; only very small local models are realistic")
+        elif ram_gb < 16:
+            warnings.append("host RAM is below 16GB; prefer tiny-router or laptop-safe profiles")
+    else:
+        warnings.append("host RAM could not be detected")
+
+    benchmark = {
+        "requested": bool(getattr(args, "benchmark", False)),
+        "performed": False,
+    }
+    if getattr(args, "benchmark", False):
+        benchmark = _benchmark(target)
+        if benchmark.get("error"):
+            warnings.append(f"benchmark did not complete: {benchmark['error']}")
+        elif benchmark.get("performed"):
+            write_speed = benchmark.get("writeMBps") or 0
+            read_speed = benchmark.get("readMBps") or 0
+            if write_speed < 10:
+                failures.append(f"write benchmark below minimum: {write_speed} MB/s")
+            elif write_speed < 25:
+                warnings.append(f"write benchmark is usable but slow: {write_speed} MB/s")
+            if read_speed < 20:
+                failures.append(f"read benchmark below minimum: {read_speed} MB/s")
+            elif read_speed < 50:
+                warnings.append(f"read benchmark is usable but slow: {read_speed} MB/s")
 
     decision = "fail" if failures else "warn" if warnings else "pass"
 
@@ -201,19 +459,18 @@ def preflight(args) -> int:
             "exists": exists,
             "writable": writable,
             "disk": usage,
-            "host": {
-                "system": platform.system(),
-                "machine": platform.machine(),
-                "platform": platform.platform(),
-            },
+            "mount": mount,
+            "host": host,
             "runtimePaths": runtime_paths,
-            "benchmarkRequested": bool(getattr(args, "benchmark", False)),
-            "benchmarkPerformed": False,
-            "largeFileSupportWarning": warning,
+            "benchmark": benchmark,
+            "benchmarkRequested": benchmark.get("requested", False),
+            "benchmarkPerformed": benchmark.get("performed", False),
+            "largeFileSupportWarning": None if mount.get("largeFileSupport") == "ok" else mount.get("largeFileReason"),
             "failures": failures,
             "warnings": warnings,
             "decision": decision,
-            "mutatesTarget": False,
+            "mutatesTarget": bool(getattr(args, "benchmark", False)),
+            "mutationScope": "temporary benchmark file only" if getattr(args, "benchmark", False) else None,
         }
     )
 
