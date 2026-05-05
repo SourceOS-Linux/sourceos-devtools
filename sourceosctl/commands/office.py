@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from sourceosctl.commands.office_runtime_contracts import build_office_runtime_contracts
 from sourceosctl.commands.ooxml import OOXML_GENERATION_FORMATS, write_ooxml_artifact
 
 
@@ -70,7 +71,7 @@ GUARDED_GENERATION_FORMATS = TEXT_GENERATION_FORMATS | OOXML_GENERATION_FORMATS
 DEFAULT_BACKEND_BY_MODE = {
     "local-headless": "libreoffice",
     "browser-collab": "collabora",
-    "remote-api": "microsoft-graph",
+    "remote-api": "sourceos-remote",
     "native": "sourceos-native",
     "manual-upload": "manual",
 }
@@ -250,7 +251,7 @@ def _build_evidence(
                 "sizeBytes": output_path.stat().st_size,
             }
         )
-    return {
+    evidence = {
         "kind": "OfficeArtifactEvidence",
         "capturedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "workroomId": artifact["workroomId"],
@@ -288,6 +289,10 @@ def _build_evidence(
             "notes": notes,
         },
     }
+    runtime_contracts = build_office_runtime_contracts(plan=plan, evidence=evidence)
+    if runtime_contracts:
+        evidence["officeRuntimeContracts"] = runtime_contracts
+    return evidence
 
 
 def _write_json(path: str, payload: Dict[str, Any]) -> None:
@@ -527,6 +532,9 @@ def evidence_inspect(args) -> int:
         return 1
 
     office_artifact = payload.get("officeArtifact", {}) if isinstance(payload, dict) else {}
+    runtime_contracts = payload.get("officeRuntimeContracts", {}) if isinstance(payload, dict) else {}
+    version_record = runtime_contracts.get("officeVersionRecord", {}) if isinstance(runtime_contracts, dict) else {}
+    writeback_record = runtime_contracts.get("officeWritebackRecord", {}) if isinstance(runtime_contracts, dict) else {}
     summary = {
         "path": str(path),
         "kind": payload.get("kind") if isinstance(payload, dict) else None,
@@ -536,5 +544,8 @@ def evidence_inspect(args) -> int:
         "artifactType": office_artifact.get("artifactType") if isinstance(office_artifact, dict) else payload.get("artifactType"),
         "format": office_artifact.get("format") if isinstance(office_artifact, dict) else payload.get("format"),
         "evidenceRefs": office_artifact.get("evidenceRefs", []) if isinstance(office_artifact, dict) else payload.get("evidenceRefs", []),
+        "runtimeContractKinds": sorted(runtime_contracts.keys()) if isinstance(runtime_contracts, dict) else [],
+        "officeVersionRecordId": version_record.get("version_id") if isinstance(version_record, dict) else None,
+        "officeWritebackRecordId": writeback_record.get("writeback_id") if isinstance(writeback_record, dict) else None,
     }
     return _print_json(summary)
