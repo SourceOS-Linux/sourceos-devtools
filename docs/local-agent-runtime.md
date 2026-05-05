@@ -4,7 +4,7 @@
 
 Canonical policy lives in `SourceOS-Linux/sourceos-spec/specs/local-agent-runtime.md`.
 
-This repository owns the CLI implementation surface: preflight, doctor, status, logs, and guarded mutation plans for install/start/stop/restart/quarantine/uninstall.
+This repository owns the CLI implementation surface: preflight, doctor, status, logs, guarded quarantine, and guarded mutation plans for install/start/stop/restart/uninstall.
 
 ## Why this exists
 
@@ -23,6 +23,7 @@ python3 bin/sourceos-agent doctor node-commander
 python3 bin/sourceos-agent status node-commander
 python3 bin/sourceos-agent logs node-commander
 python3 bin/sourceos-agent quarantine node-commander
+python3 bin/sourceos-agent quarantine node-commander --execute --policy-ok
 python3 bin/sourceos-agent install node-commander
 python3 bin/sourceos-agent start node-commander
 python3 bin/sourceos-agent stop node-commander
@@ -54,13 +55,48 @@ Mutation commands are guarded. Without both flags, they print a plan only:
 python3 bin/sourceos-agent quarantine node-commander
 ```
 
-To permit a future guarded mutation implementation:
+Guarded quarantine is implemented:
 
 ```bash
 python3 bin/sourceos-agent quarantine node-commander --execute --policy-ok
 ```
 
-The scaffold currently refuses partial mutation even with both flags until the full quarantine/install/start/stop implementations are added.
+By default, quarantine writes to:
+
+```text
+~/Desktop/sourceos-quarantine/<agent>-<timestamp>/
+```
+
+Override the target directory with:
+
+```bash
+python3 bin/sourceos-agent quarantine node-commander --execute --policy-ok --output-dir ./quarantine
+```
+
+Other mutating verbs still refuse partial mutation even with both flags until their full implementations are added.
+
+## Quarantine evidence
+
+Guarded quarantine captures:
+
+- `checks.json` with current doctor/preflight check results;
+- `launchd-print.json` on macOS when launchctl is available;
+- `launchd-disabled.json` on macOS when launchctl is available;
+- `launchd-bootout.json` and `launchd-disable.json` command results;
+- `podman-connections.json`;
+- `podman-machines.json`;
+- `podman-info.json`;
+- `podman-ps.json`;
+- `image-inspect.json`;
+- `container-inspect.json`;
+- redacted auth files for runtime, Docker, and containers auth;
+- app logs and related agent logs;
+- moved writable user plist as `<plist>.disabled`;
+- moved legacy system plist as `<plist>.disabled` when permissions allow;
+- `manifest.json`;
+- `remediation.md`.
+
+System-wide files such as `/Library/LaunchAgents/...` may require elevated privileges. When the CLI cannot move them, it records a warning in `manifest.json` and leaves an explicit remediation path rather than silently failing.
 
 ## Checks performed
 
@@ -116,4 +152,4 @@ Future mutating implementations must:
 make validate
 ```
 
-This runs the unittest suite, including the local-agent scaffold tests.
+This runs the unittest suite, including the local-agent tests.
