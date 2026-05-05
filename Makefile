@@ -1,6 +1,6 @@
-.PHONY: validate test
+.PHONY: validate test scan-local-persistence
 
-validate: test
+validate: test scan-local-persistence
 	@test -f README.md
 	@test -f AGENTS.md
 	@test -f .github/copilot-instructions.md
@@ -11,3 +11,6 @@ validate: test
 test:
 	@python3 -m pip install --user jsonschema >/dev/null
 	@python3 -m unittest discover -s tests -v
+
+scan-local-persistence:
+	@python3 scripts/scan_local_persistence.py . --fail-on none
