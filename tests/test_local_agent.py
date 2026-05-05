@@ -31,6 +31,41 @@ class TestLocalAgentParser(unittest.TestCase):
         rc = local_agent.main(["quarantine", "node-commander"])
         self.assertEqual(rc, 0)
 
+    def test_stage_executes_with_execute_and_policy_ok(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rc = local_agent.main(["stage", "node-commander", "--execute", "--policy-ok", "--output-dir", tmp])
+            self.assertEqual(rc, 0)
+            dirs = list(pathlib.Path(tmp).glob("node-commander-*"))
+            self.assertEqual(len(dirs), 1)
+            self.assertTrue((dirs[0] / "bin" / "node-commander-launch").exists())
+            self.assertTrue((dirs[0] / "launchd" / "org.socioprophet.node-commander.plist").exists())
+            self.assertTrue((dirs[0] / "systemd-user" / "org.socioprophet.node-commander.service").exists())
+            self.assertTrue((dirs[0] / "agent.json").exists())
+
+    def test_install_plan_only(self):
+        rc = local_agent.main(["install", "node-commander"])
+        self.assertEqual(rc, 0)
+
+    def test_install_force_executes_with_mocked_runtime_failures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = local_agent.DEFAULT_AGENTS["node-commander"]
+            patched = local_agent.LocalAgent(
+                **{**agent.__dict__,
+                   "authfile": str(pathlib.Path(tmp) / "empty-auth.json"),
+                   "user_plist": str(pathlib.Path(tmp) / "LaunchAgents" / "org.socioprophet.node-commander.plist"),
+                   "log_dir": str(pathlib.Path(tmp) / "Logs"),
+                   "app_log": str(pathlib.Path(tmp) / "Logs" / "node-commander.log")}
+            )
+            with mock.patch.dict(local_agent.DEFAULT_AGENTS, {"node-commander": patched}), \
+                mock.patch.object(local_agent, "_runtime_blocking_failures", return_value=[]), \
+                mock.patch.object(local_agent, "platform") as platform_mod:
+                platform_mod.system.return_value = "Darwin"
+                platform_mod.platform.return_value = "test-platform"
+                rc = local_agent.main(["install", "node-commander", "--execute", "--policy-ok", "--force"])
+            self.assertEqual(rc, 0)
+            self.assertTrue(pathlib.Path(patched.user_plist).exists())
+            self.assertTrue(pathlib.Path(patched.authfile).exists())
+
     def test_quarantine_executes_with_execute_and_policy_ok(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(local_agent, "collect_checks", return_value=[]), \
@@ -50,6 +85,22 @@ class TestLocalAgentParser(unittest.TestCase):
             self.assertEqual(len(dirs), 1)
             self.assertTrue((dirs[0] / "manifest.json").exists())
             self.assertTrue((dirs[0] / "remediation.md").exists())
+
+    def test_start_refuses_blocking_preflight_failure(self):
+        failure = local_agent.Check("podman-socket", "fail", "socket refused")
+        with mock.patch.object(local_agent, "_runtime_blocking_failures", return_value=[failure]):
+            rc = local_agent.main(["start", "node-commander", "--execute", "--policy-ok"])
+        self.assertEqual(rc, 1)
+
+    def test_stop_executes_with_mocked_backends(self):
+        with mock.patch.object(local_agent, "_launchctl_binary", return_value=None), \
+            mock.patch.object(local_agent, "_podman_binary", return_value=None):
+            rc = local_agent.main(["stop", "node-commander", "--execute", "--policy-ok"])
+        self.assertEqual(rc, 0)
+
+    def test_uninstall_plan_only(self):
+        rc = local_agent.main(["uninstall", "node-commander"])
+        self.assertEqual(rc, 0)
 
 
 class TestLocalAgentChecks(unittest.TestCase):
@@ -87,6 +138,13 @@ class TestLocalAgentChecks(unittest.TestCase):
             redacted = local_agent._redacted_json(pathlib.Path(f.name))
         self.assertIn("<redacted>", redacted)
         self.assertNotIn("secret", redacted)
+
+    def test_rendered_launcher_uses_empty_authfile_and_local_image(self):
+        agent = local_agent.DEFAULT_AGENTS["node-commander"]
+        launcher = local_agent._render_launcher(agent)
+        self.assertIn("--authfile", launcher)
+        self.assertIn(agent.runtime_image, launcher)
+        self.assertNotIn(agent.source_image, launcher)
 
 
 if __name__ == "__main__":
