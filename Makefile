@@ -1,6 +1,6 @@
-.PHONY: validate test scan-local-persistence validate-local-agents
+.PHONY: validate test scan-local-persistence validate-local-agents validate-local-agent-templates
 
-validate: test scan-local-persistence validate-local-agents
+validate: test scan-local-persistence validate-local-agents validate-local-agent-templates
 	@test -f README.md
 	@test -f AGENTS.md
 	@test -f .github/copilot-instructions.md
@@ -17,3 +17,6 @@ scan-local-persistence:
 
 validate-local-agents:
 	@python3 scripts/validate_local_agents.py .
+
+validate-local-agent-templates:
+	@python3 scripts/validate_local_agent_templates.py .
