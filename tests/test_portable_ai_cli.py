@@ -26,6 +26,39 @@ class TestPortableAICommands(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             self.assertEqual(portable_ai_main(["preflight", tmpdir]), 0)
 
+    def test_preflight_records_mount_and_host_facts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            captured = {}
+
+            def capture(payload):
+                captured.update(payload)
+                return 0
+
+            args = mock.Mock(target_root=tmpdir, benchmark=False)
+            with mock.patch("sourceosctl.commands.portable_ai._print_json", side_effect=capture):
+                self.assertEqual(portable_ai.preflight(args), 0)
+
+            self.assertEqual(captured["type"], "PortablePreflightEvidence")
+            self.assertIn("mount", captured)
+            self.assertIn("host", captured)
+            self.assertIn("disk", captured)
+            self.assertIn("runtimePaths", captured)
+            self.assertFalse(captured["benchmarkRequested"])
+            self.assertFalse(captured["benchmarkPerformed"])
+            self.assertFalse(captured["mutatesTarget"])
+
+    def test_preflight_benchmark_removes_tempfile(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            before = set(os.listdir(tmpdir))
+            result = portable_ai._benchmark(pathlib.Path(tmpdir), size_mb=1)
+            after = set(os.listdir(tmpdir))
+            self.assertTrue(result["requested"])
+            self.assertTrue(result["performed"])
+            self.assertTrue(result["tempFileRemoved"])
+            self.assertEqual(before, after)
+            self.assertGreater(result["writeMBps"], 0)
+            self.assertGreater(result["readMBps"], 0)
+
     def test_prepare_dry_run_does_not_create_target(self):
         with tempfile.TemporaryDirectory() as parent:
             target = pathlib.Path(parent) / "SOURCEOS_AI"
