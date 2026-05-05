@@ -9,6 +9,36 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Lightweight plugin routing for newer command groups while keeping the core
 # argparse surface stable. These command groups are non-mutating plan/probe
 # surfaces and own their own subparsers.
+if len(sys.argv) > 1 and sys.argv[1] == "contract":
+    from sourceosctl.commands.contracts import contract_main
+
+    sys.exit(contract_main(sys.argv[2:]))
+
+if len(sys.argv) > 1 and sys.argv[1] == "repo":
+    from sourceosctl.commands.contracts import repo_main
+
+    sys.exit(repo_main(sys.argv[2:]))
+
+if len(sys.argv) > 1 and sys.argv[1] == "estate":
+    from sourceosctl.commands.contracts import estate_main
+
+    sys.exit(estate_main(sys.argv[2:]))
+
+if len(sys.argv) > 1 and sys.argv[1] == "graph":
+    from sourceosctl.commands.contracts import graph_main
+
+    sys.exit(graph_main(sys.argv[2:]))
+
+if len(sys.argv) > 1 and sys.argv[1] == "sync":
+    from sourceosctl.commands.contracts import sync_main
+
+    sys.exit(sync_main(sys.argv[2:]))
+
+if len(sys.argv) > 1 and sys.argv[1] == "policy":
+    from sourceosctl.commands.contracts import policy_main
+
+    sys.exit(policy_main(sys.argv[2:]))
+
 if len(sys.argv) > 1 and sys.argv[1] == "network":
     from sourceosctl.commands.network import network_main
 
