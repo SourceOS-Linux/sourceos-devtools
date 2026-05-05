@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""sourceos-agent entry-point script."""
+import os
+import sys
+
+# Allow running directly from the repo root without installing.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sourceosctl.commands.local_agent import main
+
+sys.exit(main())
