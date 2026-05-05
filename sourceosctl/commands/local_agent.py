@@ -1,15 +1,15 @@
 """SourceOS local-agent runtime helpers.
 
 This module is intentionally conservative: status, preflight, doctor, and logs are
-read-only. Mutating verbs require both --execute and --policy-ok and currently
-emit guarded plans unless explicitly implemented. The goal is to prevent the
-class of failure where a Nix-generated local service silently becomes opaque,
-unbounded persistence.
+read-only. Mutating verbs require both --execute and --policy-ok. The goal is to
+prevent the class of failure where a Nix-generated local service silently becomes
+opaque, unbounded persistence.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import pathlib
@@ -18,7 +18,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Iterable, Optional
 
 
@@ -75,6 +75,14 @@ class Check:
     remediation: Optional[str] = None
 
 
+@dataclass
+class ActionResult:
+    action: str
+    status: str
+    detail: str
+    path: Optional[str] = None
+
+
 def _expand(path: str) -> pathlib.Path:
     return pathlib.Path(os.path.expandvars(os.path.expanduser(path)))
 
@@ -111,6 +119,14 @@ def _launchctl_binary() -> Optional[str]:
 
 def _systemctl_binary() -> Optional[str]:
     return shutil.which("systemctl")
+
+
+def _timestamp() -> str:
+    return _dt.datetime.now(tz=_dt.timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S")
+
+
+def _iso_now() -> str:
+    return _dt.datetime.now(tz=_dt.timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
 def _authfile_is_empty_auth(path: pathlib.Path) -> tuple[bool, str]:
@@ -360,6 +376,148 @@ def _print_checks(checks: Iterable[Check]) -> int:
     return worst
 
 
+def _write_text(path: pathlib.Path, content: str) -> ActionResult:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return ActionResult("write", "ok", f"wrote {path}", str(path))
+    except Exception as exc:  # noqa: BLE001
+        return ActionResult("write", "warn", f"could not write {path}: {exc}", str(path))
+
+
+def _copy_if_exists(src: pathlib.Path, dst: pathlib.Path, label: str) -> ActionResult:
+    if not src.exists():
+        return ActionResult(label, "skip", f"missing: {src}", str(src))
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        return ActionResult(label, "ok", f"copied {src} -> {dst}", str(dst))
+    except Exception as exc:  # noqa: BLE001
+        return ActionResult(label, "warn", f"could not copy {src}: {exc}", str(src))
+
+
+def _move_if_exists(src: pathlib.Path, dst: pathlib.Path, label: str) -> ActionResult:
+    if not src.exists():
+        return ActionResult(label, "skip", f"missing: {src}", str(src))
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+        return ActionResult(label, "ok", f"moved {src} -> {dst}", str(dst))
+    except Exception as exc:  # noqa: BLE001
+        return ActionResult(label, "warn", f"could not move {src}: {exc}", str(src))
+
+
+def _run_capture(cmd: list[str], out_path: pathlib.Path, action: str, timeout: int = 12) -> ActionResult:
+    rc, out, err = _run(cmd, timeout=timeout)
+    payload = {
+        "command": cmd,
+        "returncode": rc,
+        "stdout": out,
+        "stderr": err,
+        "capturedAt": _iso_now(),
+    }
+    result = _write_text(out_path, json.dumps(payload, indent=2, sort_keys=True))
+    if rc == 0:
+        return ActionResult(action, result.status, f"captured {' '.join(cmd)}", str(out_path))
+    return ActionResult(action, "warn", f"command returned {rc}: {' '.join(cmd)}", str(out_path))
+
+
+def _capture_launchd(agent: LocalAgent, qdir: pathlib.Path) -> list[ActionResult]:
+    results: list[ActionResult] = []
+    if platform.system() != "Darwin":
+        return [ActionResult("launchd", "skip", "not a Darwin host")]
+    launchctl = _launchctl_binary()
+    if not launchctl:
+        return [ActionResult("launchd", "warn", "launchctl not found")]
+    domain_label = f"gui/{os.getuid()}/{agent.label}"
+    user_plist = _expand(agent.user_plist)
+    results.append(_run_capture([launchctl, "print", domain_label], qdir / "launchd-print.json", "launchd-print"))
+    results.append(_run_capture([launchctl, "print-disabled", f"gui/{os.getuid()}"], qdir / "launchd-disabled.json", "launchd-disabled"))
+    results.append(_run_capture([launchctl, "bootout", f"gui/{os.getuid()}", str(user_plist)], qdir / "launchd-bootout.json", "launchd-bootout"))
+    results.append(_run_capture([launchctl, "disable", domain_label], qdir / "launchd-disable.json", "launchd-disable"))
+    return results
+
+
+def _capture_podman(agent: LocalAgent, qdir: pathlib.Path) -> list[ActionResult]:
+    podman = _podman_binary()
+    if not podman:
+        return [ActionResult("podman", "skip", "podman not found")]
+    return [
+        _run_capture([podman, "system", "connection", "list"], qdir / "podman-connections.json", "podman-connections"),
+        _run_capture([podman, "machine", "list"], qdir / "podman-machines.json", "podman-machines"),
+        _run_capture([podman, "--connection", agent.podman_connection, "info"], qdir / "podman-info.json", "podman-info"),
+        _run_capture([podman, "--connection", agent.podman_connection, "ps", "-a", "--filter", f"name={agent.container_name}"], qdir / "podman-ps.json", "podman-ps"),
+        _run_capture([podman, "--connection", agent.podman_connection, "image", "inspect", agent.runtime_image], qdir / "image-inspect.json", "image-inspect"),
+        _run_capture([podman, "--connection", agent.podman_connection, "container", "inspect", agent.container_name], qdir / "container-inspect.json", "container-inspect"),
+    ]
+
+
+def _capture_redacted_auth(agent: LocalAgent, qdir: pathlib.Path) -> list[ActionResult]:
+    targets = {
+        "runtime-authfile-redacted.json": _expand(agent.authfile),
+        "docker-config-redacted.json": _expand("~/.docker/config.json"),
+        "containers-auth-redacted.json": _expand("~/.config/containers/auth.json"),
+    }
+    results = []
+    for name, path in targets.items():
+        results.append(_write_text(qdir / name, _redacted_json(path)))
+    return results
+
+
+def _quarantine_agent(agent: LocalAgent, output_dir: pathlib.Path) -> tuple[pathlib.Path, list[ActionResult]]:
+    qdir = output_dir / f"{agent.name}-{_timestamp()}"
+    qdir.mkdir(parents=True, exist_ok=False)
+    results: list[ActionResult] = []
+
+    checks = collect_checks(agent)
+    results.append(_write_text(qdir / "checks.json", json.dumps([asdict(c) for c in checks], indent=2, sort_keys=True)))
+    results.extend(_capture_launchd(agent, qdir))
+    results.extend(_capture_podman(agent, qdir))
+    results.extend(_capture_redacted_auth(agent, qdir))
+
+    user_plist = _expand(agent.user_plist)
+    legacy_plist = pathlib.Path(agent.legacy_system_plist)
+    app_log = _expand(agent.app_log)
+    log_dir = _expand(agent.log_dir)
+    results.append(_copy_if_exists(app_log, qdir / app_log.name, "copy-app-log"))
+    if log_dir.exists():
+        for candidate in log_dir.glob(f"{agent.name}*.log"):
+            results.append(_copy_if_exists(candidate, qdir / candidate.name, "copy-related-log"))
+
+    # Move writable service definitions after evidence capture. System-wide legacy
+    # plists may require sudo; in that case we report the warning and leave the
+    # operator with a clear follow-up rather than silently failing.
+    results.append(_move_if_exists(user_plist, qdir / f"{user_plist.name}.disabled", "move-user-plist"))
+    results.append(_move_if_exists(legacy_plist, qdir / f"{legacy_plist.name}.disabled", "move-legacy-system-plist"))
+
+    manifest = {
+        "agent": asdict(agent),
+        "createdAt": _iso_now(),
+        "platform": platform.platform(),
+        "quarantineDir": str(qdir),
+        "results": [asdict(r) for r in results],
+        "operatorNotes": [
+            "Review warning results; system-wide files may require sudo removal.",
+            "Reinstall only through the SourceOS local-agent runtime contract.",
+        ],
+    }
+    results.append(_write_text(qdir / "manifest.json", json.dumps(manifest, indent=2, sort_keys=True)))
+    remediation = [
+        f"# Quarantine remediation for {agent.name}",
+        "",
+        "1. Review `manifest.json` and warning results.",
+        "2. Confirm no legacy system-wide plist remains.",
+        "3. Confirm Podman container state is not stuck in `Stopping` or `Removing`.",
+        "4. Reinstall only after `sourceos-agent preflight` passes.",
+        "",
+        "Useful commands:",
+        "",
+        f"```bash\nsourceos-agent preflight {agent.name}\nsourceos-agent status {agent.name}\n```",
+    ]
+    results.append(_write_text(qdir / "remediation.md", "\n".join(remediation) + "\n"))
+    return qdir, results
+
+
 def list_agents(_args: argparse.Namespace) -> int:
     for agent in DEFAULT_AGENTS.values():
         print(f"{agent.name}\t{agent.scope}\t{agent.runtime}\t{agent.runtime_image}")
@@ -437,7 +595,21 @@ def restart(args: argparse.Namespace) -> int:
 
 
 def quarantine(args: argparse.Namespace) -> int:
-    return _guarded_mutation(args, "quarantine")
+    agent = _agent_or_error(args.agent)
+    if not (args.execute and args.policy_ok):
+        output = _expand(args.output_dir)
+        print(f"planned quarantine: {agent.name}")
+        print(f"would capture evidence and move writable service definitions under: {output}")
+        print("mutation not executed; pass --execute --policy-ok to allow guarded local changes")
+        return 0
+    qdir, results = _quarantine_agent(agent, _expand(args.output_dir))
+    print(f"quarantined {agent.name}: {qdir}")
+    worst = 0
+    for result in results:
+        print(f"[{result.status}] {result.action}: {result.detail}")
+        if result.status == "warn":
+            worst = max(worst, 1)
+    return worst
 
 
 def uninstall(args: argparse.Namespace) -> int:
@@ -480,6 +652,12 @@ def build_parser(prog: str = "sourceos-agent") -> argparse.ArgumentParser:
         if name in {"install", "stage", "start", "stop", "restart", "quarantine", "uninstall"}:
             p.add_argument("--execute", action="store_true", default=False, help="Execute guarded local mutation")
             p.add_argument("--policy-ok", action="store_true", default=False, help="Confirm policy approval")
+        if name == "quarantine":
+            p.add_argument(
+                "--output-dir",
+                default="~/Desktop/sourceos-quarantine",
+                help="Directory where quarantine evidence folders are created",
+            )
         p.set_defaults(func=func)
     return parser
 
