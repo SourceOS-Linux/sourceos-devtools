@@ -41,10 +41,6 @@ class LocalAgent:
     app_log: str
 
 
-def _home() -> str:
-    return os.path.expanduser("~")
-
-
 DEFAULT_AGENTS: dict[str, LocalAgent] = {
     "node-commander": LocalAgent(
         name="node-commander",
@@ -170,210 +166,86 @@ def _agent_or_error(name: str) -> LocalAgent:
         raise SystemExit(f"unknown local agent: {name}; known agents: {known}") from exc
 
 
-def _launchd_status(agent: LocalAgent) -> Check:
-    if platform.system() != "Darwin":
-        return Check("launchd", "skip", "not a Darwin host")
-    launchctl = _launchctl_binary()
-    if not launchctl:
-        return Check("launchd", "fail", "launchctl not found")
-    domain = f"gui/{os.getuid()}/{agent.label}"
-    rc, out, err = _run([launchctl, "print", domain])
-    if rc == 0:
-        state = "unknown"
-        runs = "unknown"
-        for line in out.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("state ="):
-                state = stripped.split("=", 1)[1].strip()
-            if stripped.startswith("runs ="):
-                runs = stripped.split("=", 1)[1].strip()
-        return Check("launchd", "pass", f"service registered: state={state}; runs={runs}")
-    return Check("launchd", "warn", err or out or "service not registered")
+def _launcher_path(agent: LocalAgent) -> pathlib.Path:
+    return _expand(f"~/.local/bin/sourceos-agents/{agent.name}-launch")
 
 
-def _launchd_disabled_override(agent: LocalAgent) -> Check:
-    if platform.system() != "Darwin":
-        return Check("launchd-disabled-override", "skip", "not a Darwin host")
-    launchctl = _launchctl_binary()
-    if not launchctl:
-        return Check("launchd-disabled-override", "fail", "launchctl not found")
-    rc, out, err = _run([launchctl, "print-disabled", f"gui/{os.getuid()}"])
-    if rc != 0:
-        return Check("launchd-disabled-override", "warn", err or out or "unable to read disabled overrides")
-    needle = f'"{agent.label}" => disabled'
-    if needle in out:
-        return Check(
-            "launchd-disabled-override",
-            "fail",
-            "service label is disabled in launchd overrides",
-            f"launchctl enable gui/{os.getuid()}/{agent.label}",
-        )
-    return Check("launchd-disabled-override", "pass", "no disabled override found")
+def _systemd_user_unit_path(agent: LocalAgent) -> pathlib.Path:
+    return _expand(f"~/.config/systemd/user/{agent.label}.service")
 
 
-def _plist_check(agent: LocalAgent) -> list[Check]:
-    checks: list[Check] = []
-    user_plist = _expand(agent.user_plist)
-    legacy = pathlib.Path(agent.legacy_system_plist)
-    if user_plist.exists():
-        try:
-            with user_plist.open("rb") as fh:
-                payload = plistlib.load(fh)
-            label = payload.get("Label")
-            keepalive = payload.get("KeepAlive")
-            stdout = payload.get("StandardOutPath")
-            stderr = payload.get("StandardErrorPath")
-            status = "pass" if label == agent.label else "fail"
-            checks.append(Check("user-plist", status, f"{user_plist}; KeepAlive={keepalive}; stdout={stdout}; stderr={stderr}"))
-            if keepalive is True:
-                checks.append(Check("keepalive", "fail", "KeepAlive=true requires bounded restart policy"))
-            else:
-                checks.append(Check("keepalive", "pass", "KeepAlive is not enabled"))
-            for key, value in {"stdout": stdout, "stderr": stderr}.items():
-                if value and str(value).startswith("/tmp/"):
-                    checks.append(Check(f"{key}-log", "fail", f"primary log path uses /tmp: {value}"))
-        except Exception as exc:  # noqa: BLE001
-            checks.append(Check("user-plist", "fail", f"plist parse failed: {exc}"))
-    else:
-        checks.append(Check("user-plist", "warn", f"not installed: {user_plist}"))
-    if legacy.exists():
-        checks.append(
-            Check(
-                "legacy-system-plist",
-                "fail",
-                f"legacy system-wide user agent still exists: {legacy}",
-                f"sourceos-agent quarantine {agent.name}",
-            )
-        )
-    else:
-        checks.append(Check("legacy-system-plist", "pass", "no legacy /Library/LaunchAgents plist found"))
-    return checks
+def _render_launcher(agent: LocalAgent) -> str:
+    podman = _podman_binary() or "/opt/homebrew/bin/podman"
+    auth = str(_expand(agent.authfile))
+    log = str(_expand(agent.app_log))
+    return f'''#!/usr/bin/env bash
+set -euo pipefail
+
+PODMAN="{podman}"
+CONN="{agent.podman_connection}"
+IMAGE="{agent.runtime_image}"
+AUTH="{auth}"
+LOG="{log}"
+NAME="{agent.container_name}"
+
+ts() {{
+  /bin/date "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S%z"
+}}
+
+mkdir -p "$(dirname "$AUTH")" "$(dirname "$LOG")"
+[ -f "$AUTH" ] || printf '{{"auths":{{}}}}\n' > "$AUTH"
+
+{{
+  echo "[$(ts)] {agent.name} launch requested"
+
+  if ! "$PODMAN" --connection "$CONN" info >/dev/null 2>&1; then
+    echo "[$(ts)] Podman machine/socket unavailable; exiting cleanly."
+    exit 0
+  fi
+
+  if ! "$PODMAN" --connection "$CONN" image exists "$IMAGE"; then
+    echo "[$(ts)] Local image missing: $IMAGE"
+    exit 0
+  fi
+
+  echo "[$(ts)] starting container: $IMAGE"
+  exec "$PODMAN" --connection "$CONN" run --pull=never --authfile "$AUTH" --rm --replace \
+    --name "$NAME" \
+    "$IMAGE"
+}} >> "$LOG" 2>&1
+'''
 
 
-def _podman_checks(agent: LocalAgent) -> list[Check]:
-    checks: list[Check] = []
-    podman = _podman_binary()
-    if not podman:
-        return [Check("podman", "fail", "podman binary not found")]
-    checks.append(Check("podman", "pass", podman))
-
-    rc, out, err = _run([podman, "--connection", agent.podman_connection, "info"], timeout=12)
-    if rc == 0:
-        checks.append(Check("podman-socket", "pass", f"connection reachable: {agent.podman_connection}"))
-    else:
-        checks.append(
-            Check(
-                "podman-socket",
-                "fail",
-                err or out or "podman connection failed",
-                f"podman machine start {agent.podman_connection}",
-            )
-        )
-
-    rc, out, err = _run([podman, "--connection", agent.podman_connection, "image", "exists", agent.runtime_image], timeout=8)
-    if rc == 0:
-        checks.append(Check("runtime-image", "pass", f"local image present: {agent.runtime_image}"))
-    else:
-        checks.append(
-            Check(
-                "runtime-image",
-                "fail",
-                err or out or f"local image missing: {agent.runtime_image}",
-                f"tag/pull image then run with local tag: {agent.runtime_image}",
-            )
-        )
-
-    rc, out, err = _run(
-        [
-            podman,
-            "--connection",
-            agent.podman_connection,
-            "ps",
-            "-a",
-            "--filter",
-            f"name={agent.container_name}",
-            "--format",
-            "{{.Names}} {{.Status}}",
-        ],
-        timeout=8,
-    )
-    if rc == 0 and out:
-        status = "warn" if "Stopping" in out or "Removing" in out else "pass"
-        checks.append(Check("container-state", status, out))
-    elif rc == 0:
-        checks.append(Check("container-state", "warn", "container not present"))
-    else:
-        checks.append(Check("container-state", "warn", err or out or "unable to inspect container state"))
-
-    return checks
-
-
-def _auth_checks(agent: LocalAgent) -> list[Check]:
-    checks: list[Check] = []
-    authfile = _expand(agent.authfile)
-    ok, detail = _authfile_is_empty_auth(authfile)
-    checks.append(Check("runtime-authfile", "pass" if ok else "fail", f"{authfile}: {detail}"))
-
-    docker_config = _expand("~/.docker/config.json")
-    containers_auth = _expand("~/.config/containers/auth.json")
-    if docker_config.exists():
-        redacted = _redacted_json(docker_config)
-        if "gcloud" in redacted or "credHelpers" in redacted:
-            checks.append(
-                Check(
-                    "ambient-docker-auth",
-                    "warn",
-                    "host Docker config contains credential helpers; runtime must use explicit authfile",
-                )
-            )
-        else:
-            checks.append(Check("ambient-docker-auth", "pass", "no obvious credential helper risk"))
-    else:
-        checks.append(Check("ambient-docker-auth", "pass", "no ~/.docker/config.json found"))
-
-    if containers_auth.exists():
-        redacted = _redacted_json(containers_auth)
-        if "us-central1-docker.pkg.dev" in redacted:
-            checks.append(
-                Check(
-                    "ambient-containers-auth",
-                    "warn",
-                    "containers auth references Google Artifact Registry; runtime should use empty-authfile/local tag",
-                )
-            )
-        else:
-            checks.append(Check("ambient-containers-auth", "pass", "containers auth present without known registry risk"))
-    else:
-        checks.append(Check("ambient-containers-auth", "pass", "no ~/.config/containers/auth.json found"))
-    return checks
-
-
-def collect_checks(agent: LocalAgent) -> list[Check]:
-    checks = [
-        Check("agent", "pass", f"{agent.name}; scope={agent.scope}; runtime={agent.runtime}"),
-        Check("runtime-image-policy", "pass" if agent.runtime_image.startswith("localhost/") else "fail", agent.runtime_image),
-        Check("source-image-provenance", "pass", agent.source_image),
-    ]
-    checks.extend(_plist_check(agent))
-    checks.append(_launchd_status(agent))
-    checks.append(_launchd_disabled_override(agent))
-    checks.extend(_podman_checks(agent))
-    checks.extend(_auth_checks(agent))
+def _render_launchd_plist(agent: LocalAgent, launcher_path: pathlib.Path) -> bytes:
     log_dir = _expand(agent.log_dir)
-    checks.append(Check("log-dir", "pass" if log_dir.exists() else "warn", str(log_dir)))
-    return checks
+    payload = {
+        "Label": agent.label,
+        "ProgramArguments": [str(launcher_path)],
+        "RunAtLoad": True,
+        "KeepAlive": False,
+        "StandardOutPath": str(log_dir / f"{agent.name}.launchd.out.log"),
+        "StandardErrorPath": str(log_dir / f"{agent.name}.launchd.err.log"),
+    }
+    return plistlib.dumps(payload, sort_keys=True)
 
 
-def _print_checks(checks: Iterable[Check]) -> int:
-    worst = 0
-    for check in checks:
-        icon = {"pass": "ok", "warn": "warn", "fail": "fail", "skip": "skip"}.get(check.status, check.status)
-        print(f"[{icon}] {check.name}: {check.detail}")
-        if check.remediation:
-            print(f"      remediation: {check.remediation}")
-        if check.status == "fail":
-            worst = 1
-    return worst
+def _render_systemd_user_unit(agent: LocalAgent, launcher_path: pathlib.Path) -> str:
+    return f"""[Unit]
+Description=SourceOS local agent: {agent.name}
+Documentation=https://github.com/SourceOS-Linux/sourceos-spec
+After=default.target
+
+[Service]
+Type=simple
+ExecStart={launcher_path}
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=3600
+StartLimitBurst=3
+
+[Install]
+WantedBy=default.target
+"""
 
 
 def _write_text(path: pathlib.Path, content: str) -> ActionResult:
@@ -383,6 +255,23 @@ def _write_text(path: pathlib.Path, content: str) -> ActionResult:
         return ActionResult("write", "ok", f"wrote {path}", str(path))
     except Exception as exc:  # noqa: BLE001
         return ActionResult("write", "warn", f"could not write {path}: {exc}", str(path))
+
+
+def _write_bytes(path: pathlib.Path, content: bytes) -> ActionResult:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return ActionResult("write", "ok", f"wrote {path}", str(path))
+    except Exception as exc:  # noqa: BLE001
+        return ActionResult("write", "warn", f"could not write {path}: {exc}", str(path))
+
+
+def _chmod(path: pathlib.Path, mode: int, label: str) -> ActionResult:
+    try:
+        path.chmod(mode)
+        return ActionResult(label, "ok", f"chmod {oct(mode)} {path}", str(path))
+    except Exception as exc:  # noqa: BLE001
+        return ActionResult(label, "warn", f"could not chmod {path}: {exc}", str(path))
 
 
 def _copy_if_exists(src: pathlib.Path, dst: pathlib.Path, label: str) -> ActionResult:
@@ -420,6 +309,68 @@ def _run_capture(cmd: list[str], out_path: pathlib.Path, action: str, timeout: i
     if rc == 0:
         return ActionResult(action, result.status, f"captured {' '.join(cmd)}", str(out_path))
     return ActionResult(action, "warn", f"command returned {rc}: {' '.join(cmd)}", str(out_path))
+
+
+def _runtime_blocking_failures(agent: LocalAgent) -> list[Check]:
+    blocking = {
+        "runtime-image-policy",
+        "podman",
+        "podman-socket",
+        "runtime-image",
+        "runtime-authfile",
+    }
+    return [c for c in collect_checks(agent) if c.name in blocking and c.status == "fail"]
+
+
+def _emit_results(results: list[ActionResult]) -> int:
+    worst = 0
+    for result in results:
+        print(f"[{result.status}] {result.action}: {result.detail}")
+        if result.status == "warn":
+            worst = 1
+    return worst
+
+
+def _stage_agent(agent: LocalAgent, output_dir: pathlib.Path) -> tuple[pathlib.Path, list[ActionResult]]:
+    stage_dir = output_dir / f"{agent.name}-{_timestamp()}"
+    launcher = stage_dir / "bin" / f"{agent.name}-launch"
+    plist = stage_dir / "launchd" / f"{agent.label}.plist"
+    unit = stage_dir / "systemd-user" / f"{agent.label}.service"
+    results = [
+        _write_text(launcher, _render_launcher(agent)),
+        _chmod(launcher, 0o755, "chmod-launcher"),
+        _write_bytes(plist, _render_launchd_plist(agent, launcher)),
+        _write_text(unit, _render_systemd_user_unit(agent, launcher)),
+        _write_text(stage_dir / "agent.json", json.dumps(asdict(agent), indent=2, sort_keys=True)),
+    ]
+    return stage_dir, results
+
+
+def _install_agent(agent: LocalAgent) -> list[ActionResult]:
+    results: list[ActionResult] = []
+    launcher = _launcher_path(agent)
+    auth = _expand(agent.authfile)
+    log_dir = _expand(agent.log_dir)
+    results.append(_write_text(auth, '{"auths":{}}\n'))
+    results.append(_write_text(launcher, _render_launcher(agent)))
+    results.append(_chmod(launcher, 0o755, "chmod-launcher"))
+    results.append(_write_text(log_dir / ".sourceos-local-agent", f"managed-by=sourceos-agent\nagent={agent.name}\n"))
+
+    if platform.system() == "Darwin":
+        plist = _expand(agent.user_plist)
+        results.append(_write_bytes(plist, _render_launchd_plist(agent, launcher)))
+        results.append(_chmod(plist, 0o644, "chmod-plist"))
+    else:
+        unit = _systemd_user_unit_path(agent)
+        results.append(_write_text(unit, _render_systemd_user_unit(agent, launcher)))
+        results.append(_chmod(unit, 0o644, "chmod-systemd-unit"))
+    results.append(_write_text(log_dir / f"{agent.name}.install-manifest.json", json.dumps({
+        "agent": asdict(agent),
+        "installedAt": _iso_now(),
+        "launcher": str(launcher),
+        "platform": platform.platform(),
+    }, indent=2, sort_keys=True)))
+    return results
 
 
 def _capture_launchd(agent: LocalAgent, qdir: pathlib.Path) -> list[ActionResult]:
@@ -484,9 +435,6 @@ def _quarantine_agent(agent: LocalAgent, output_dir: pathlib.Path) -> tuple[path
         for candidate in log_dir.glob(f"{agent.name}*.log"):
             results.append(_copy_if_exists(candidate, qdir / candidate.name, "copy-related-log"))
 
-    # Move writable service definitions after evidence capture. System-wide legacy
-    # plists may require sudo; in that case we report the warning and leave the
-    # operator with a clear follow-up rather than silently failing.
     results.append(_move_if_exists(user_plist, qdir / f"{user_plist.name}.disabled", "move-user-plist"))
     results.append(_move_if_exists(legacy_plist, qdir / f"{legacy_plist.name}.disabled", "move-legacy-system-plist"))
 
@@ -564,34 +512,121 @@ def logs(args: argparse.Namespace) -> int:
     return 0
 
 
-def _guarded_mutation(args: argparse.Namespace, action: str) -> int:
+def _guarded_mutation(args: argparse.Namespace, action: str) -> tuple[LocalAgent, bool]:
     agent = _agent_or_error(args.agent)
     if not (args.execute and args.policy_ok):
         print(f"planned {action}: {agent.name}")
         print("mutation not executed; pass --execute --policy-ok to allow guarded local changes")
-        return 0
-    print(f"{action} is not yet implemented in this scaffold; refusing partial mutation", file=sys.stderr)
-    return 1
-
-
-def install(args: argparse.Namespace) -> int:
-    return _guarded_mutation(args, "install")
+        return agent, False
+    return agent, True
 
 
 def stage(args: argparse.Namespace) -> int:
-    return _guarded_mutation(args, "stage")
+    agent, allowed = _guarded_mutation(args, "stage")
+    output = _expand(args.output_dir)
+    if not allowed:
+        print(f"would write generated launcher/plist/unit under: {output}")
+        return 0
+    stage_dir, results = _stage_agent(agent, output)
+    print(f"staged {agent.name}: {stage_dir}")
+    return _emit_results(results)
+
+
+def install(args: argparse.Namespace) -> int:
+    agent, allowed = _guarded_mutation(args, "install")
+    if not allowed:
+        print("would write launcher, authfile, logs marker, and user service definition")
+        return 0
+    failures = [c for c in _runtime_blocking_failures(agent) if c.name not in {"runtime-authfile"}]
+    if failures and not args.force:
+        print("install refused because runtime preflight has blocking failures:", file=sys.stderr)
+        _print_checks(failures)
+        print("pass --force to install staged service files without starting", file=sys.stderr)
+        return 1
+    results = _install_agent(agent)
+    print(f"installed {agent.name}")
+    return _emit_results(results)
 
 
 def start(args: argparse.Namespace) -> int:
-    return _guarded_mutation(args, "start")
+    agent, allowed = _guarded_mutation(args, "start")
+    if not allowed:
+        print("would enable/start user service after runtime preflight passes")
+        return 0
+    failures = _runtime_blocking_failures(agent)
+    if failures:
+        print("start refused because runtime preflight has blocking failures:", file=sys.stderr)
+        _print_checks(failures)
+        return 1
+    results: list[ActionResult] = []
+    if platform.system() == "Darwin":
+        launchctl = _launchctl_binary()
+        if not launchctl:
+            results.append(ActionResult("start", "warn", "launchctl not found"))
+        else:
+            plist = _expand(agent.user_plist)
+            domain = f"gui/{os.getuid()}"
+            label = f"{domain}/{agent.label}"
+            results.append(ActionResult("launchd-enable", "ok" if _run([launchctl, "enable", label])[0] == 0 else "warn", f"enable {label}"))
+            rc, out, err = _run([launchctl, "bootstrap", domain, str(plist)])
+            if rc not in {0, 37}:  # 37 can mean already bootstrapped on some macOS builds.
+                results.append(ActionResult("launchd-bootstrap", "warn", err or out or f"bootstrap returned {rc}"))
+            else:
+                results.append(ActionResult("launchd-bootstrap", "ok", f"bootstrap {plist}"))
+            rc, out, err = _run([launchctl, "kickstart", "-k", label])
+            results.append(ActionResult("launchd-kickstart", "ok" if rc == 0 else "warn", err or out or f"kickstart returned {rc}"))
+    else:
+        systemctl = _systemctl_binary()
+        if not systemctl:
+            results.append(ActionResult("start", "warn", "systemctl not found"))
+        else:
+            unit = f"{agent.label}.service"
+            for cmd, action in [
+                ([systemctl, "--user", "daemon-reload"], "systemd-daemon-reload"),
+                ([systemctl, "--user", "enable", unit], "systemd-enable"),
+                ([systemctl, "--user", "start", unit], "systemd-start"),
+            ]:
+                rc, out, err = _run(cmd)
+                results.append(ActionResult(action, "ok" if rc == 0 else "warn", err or out or " ".join(cmd)))
+    print(f"started {agent.name}")
+    return _emit_results(results)
 
 
 def stop(args: argparse.Namespace) -> int:
-    return _guarded_mutation(args, "stop")
+    agent, allowed = _guarded_mutation(args, "stop")
+    if not allowed:
+        print("would stop service and best-effort stop Podman container")
+        return 0
+    results: list[ActionResult] = []
+    if platform.system() == "Darwin":
+        launchctl = _launchctl_binary()
+        if launchctl:
+            results.append(_run_capture([launchctl, "bootout", f"gui/{os.getuid()}", str(_expand(agent.user_plist))], _expand(agent.log_dir) / f"{agent.name}.last-bootout.json", "launchd-bootout"))
+        else:
+            results.append(ActionResult("launchd-bootout", "skip", "launchctl not found"))
+    else:
+        systemctl = _systemctl_binary()
+        if systemctl:
+            rc, out, err = _run([systemctl, "--user", "stop", f"{agent.label}.service"])
+            results.append(ActionResult("systemd-stop", "ok" if rc == 0 else "warn", err or out or "systemctl stop"))
+        else:
+            results.append(ActionResult("systemd-stop", "skip", "systemctl not found"))
+    podman = _podman_binary()
+    if podman:
+        rc, out, err = _run([podman, "--connection", agent.podman_connection, "stop", "--ignore", agent.container_name], timeout=20)
+        results.append(ActionResult("podman-stop", "ok" if rc == 0 else "warn", err or out or "podman stop"))
+    print(f"stopped {agent.name}")
+    return _emit_results(results)
 
 
 def restart(args: argparse.Namespace) -> int:
-    return _guarded_mutation(args, "restart")
+    agent, allowed = _guarded_mutation(args, "restart")
+    if not allowed:
+        print("would stop then start the local agent")
+        return 0
+    stop_rc = stop(argparse.Namespace(agent=agent.name, execute=True, policy_ok=True))
+    start_rc = start(argparse.Namespace(agent=agent.name, execute=True, policy_ok=True))
+    return max(stop_rc, start_rc)
 
 
 def quarantine(args: argparse.Namespace) -> int:
@@ -604,16 +639,25 @@ def quarantine(args: argparse.Namespace) -> int:
         return 0
     qdir, results = _quarantine_agent(agent, _expand(args.output_dir))
     print(f"quarantined {agent.name}: {qdir}")
-    worst = 0
-    for result in results:
-        print(f"[{result.status}] {result.action}: {result.detail}")
-        if result.status == "warn":
-            worst = max(worst, 1)
-    return worst
+    return _emit_results(results)
 
 
 def uninstall(args: argparse.Namespace) -> int:
-    return _guarded_mutation(args, "uninstall")
+    agent, allowed = _guarded_mutation(args, "uninstall")
+    if not allowed:
+        print("would stop service and move user-owned generated files into quarantine")
+        return 0
+    if not args.no_quarantine:
+        qdir, results = _quarantine_agent(agent, _expand(args.output_dir))
+        print(f"quarantined before uninstall: {qdir}")
+        return _emit_results(results)
+    results = [
+        _move_if_exists(_expand(agent.user_plist), _expand(args.output_dir) / f"{agent.label}.plist.disabled", "move-user-plist"),
+        _move_if_exists(_launcher_path(agent), _expand(args.output_dir) / f"{agent.name}-launch.disabled", "move-launcher"),
+        _move_if_exists(_systemd_user_unit_path(agent), _expand(args.output_dir) / f"{agent.label}.service.disabled", "move-systemd-unit"),
+    ]
+    print(f"uninstalled {agent.name}")
+    return _emit_results(results)
 
 
 def local_runtime_doctor(_args: argparse.Namespace) -> int:
@@ -652,12 +696,16 @@ def build_parser(prog: str = "sourceos-agent") -> argparse.ArgumentParser:
         if name in {"install", "stage", "start", "stop", "restart", "quarantine", "uninstall"}:
             p.add_argument("--execute", action="store_true", default=False, help="Execute guarded local mutation")
             p.add_argument("--policy-ok", action="store_true", default=False, help="Confirm policy approval")
-        if name == "quarantine":
+        if name == "install":
+            p.add_argument("--force", action="store_true", default=False, help="Install service files even if runtime preflight blocks start")
+        if name in {"stage", "quarantine", "uninstall"}:
             p.add_argument(
                 "--output-dir",
-                default="~/Desktop/sourceos-quarantine",
-                help="Directory where quarantine evidence folders are created",
+                default="~/Desktop/sourceos-quarantine" if name != "stage" else "~/Desktop/sourceos-agent-stage",
+                help="Directory where generated/evidence folders are created",
             )
+        if name == "uninstall":
+            p.add_argument("--no-quarantine", action="store_true", default=False, help="Move generated files without evidence capture")
         p.set_defaults(func=func)
     return parser
 
