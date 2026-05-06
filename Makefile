@@ -1,6 +1,6 @@
-.PHONY: validate test scan-local-persistence validate-local-agents validate-local-agent-templates
+.PHONY: validate test scan-local-persistence validate-local-agents validate-local-agent-templates validate-reasoning-cli
 
-validate: test scan-local-persistence validate-local-agents validate-local-agent-templates
+validate: test scan-local-persistence validate-local-agents validate-local-agent-templates validate-reasoning-cli
 	@test -f README.md
 	@test -f AGENTS.md
 	@test -f .github/copilot-instructions.md
@@ -20,3 +20,9 @@ validate-local-agents:
 
 validate-local-agent-templates:
 	@python3 scripts/validate_local_agent_templates.py .
+
+validate-reasoning-cli:
+	@python3 bin/sourceosctl reasoning validate tests/fixtures/reasoning/deterministic >/dev/null
+	@python3 bin/sourceosctl reasoning inspect tests/fixtures/reasoning/deterministic >/dev/null
+	@python3 bin/sourceosctl reasoning replay-plan tests/fixtures/reasoning/deterministic >/dev/null
+	@python3 bin/sourceosctl reasoning events tests/fixtures/reasoning/deterministic >/dev/null
