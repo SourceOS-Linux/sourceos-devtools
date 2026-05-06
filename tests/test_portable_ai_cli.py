@@ -1,5 +1,6 @@
 """Unit tests for SourceOS Portable AI Kit commands."""
 
+import hashlib
 import json
 import os
 import pathlib
@@ -99,6 +100,96 @@ class TestPortableAICommands(unittest.TestCase):
             self.assertEqual(payload["profile"], "laptop-safe")
             self.assertFalse(payload["downloadedModels"])
             self.assertFalse(payload["startedRuntime"])
+
+    def test_byom_verify_dry_run_hashes_local_file_only(self):
+        with tempfile.TemporaryDirectory() as parent:
+            target = pathlib.Path(parent) / "SOURCEOS_AI"
+            model = pathlib.Path(parent) / "demo.gguf"
+            model.write_bytes(b"sourceos-test-model")
+            expected_hash = hashlib.sha256(b"sourceos-test-model").hexdigest()
+            captured = {}
+
+            def capture(payload):
+                captured.update(payload)
+                return 0
+
+            with mock.patch("sourceosctl.commands.portable_ai_byom._print_json", side_effect=capture):
+                self.assertEqual(
+                    portable_ai_main([
+                        "byom",
+                        "verify",
+                        str(target),
+                        str(model),
+                        "--name",
+                        "demo",
+                    ]),
+                    0,
+                )
+
+            self.assertEqual(captured["type"], "BYOMImportPlan")
+            self.assertEqual(captured["sha256"], expected_hash)
+            self.assertFalse(captured["downloadedModel"])
+            self.assertTrue(captured["wouldWriteManifest"])
+            self.assertFalse((target / "manifests").exists())
+
+    def test_byom_execute_requires_policy_ok(self):
+        with tempfile.TemporaryDirectory() as parent:
+            target = pathlib.Path(parent) / "SOURCEOS_AI"
+            model = pathlib.Path(parent) / "demo.gguf"
+            model.write_bytes(b"sourceos-test-model")
+            self.assertEqual(
+                portable_ai_main([
+                    "byom",
+                    "verify",
+                    str(target),
+                    str(model),
+                    "--execute",
+                ]),
+                0,
+            )
+            self.assertFalse((target / "manifests").exists())
+
+    def test_byom_execute_writes_manifest_after_prepare(self):
+        with tempfile.TemporaryDirectory() as parent:
+            target = pathlib.Path(parent) / "SOURCEOS_AI"
+            model = pathlib.Path(parent) / "demo.gguf"
+            model.write_bytes(b"sourceos-test-model")
+            evidence = pathlib.Path(parent) / "byom-evidence.json"
+
+            self.assertEqual(
+                portable_ai_main([
+                    "prepare",
+                    str(target),
+                    "--profile",
+                    "byom-gguf",
+                    "--execute",
+                    "--policy-ok",
+                ]),
+                0,
+            )
+            self.assertEqual(
+                portable_ai_main([
+                    "byom",
+                    "verify",
+                    str(target),
+                    str(model),
+                    "--name",
+                    "demo",
+                    "--execute",
+                    "--policy-ok",
+                    "--evidence-out",
+                    str(evidence),
+                ]),
+                0,
+            )
+            manifest = target / "manifests" / "model-carry-pack.byom-gguf.demo.json"
+            self.assertTrue(manifest.exists())
+            self.assertTrue(evidence.exists())
+            payload = json.loads(evidence.read_text())
+            self.assertEqual(payload["type"], "BYOMImportEvidence")
+            self.assertEqual(payload["decision"], "verified")
+            self.assertTrue(payload["manifestWritten"])
+            self.assertFalse(payload["downloadedModel"])
 
     def test_start_plan(self):
         with tempfile.TemporaryDirectory() as tmpdir:
