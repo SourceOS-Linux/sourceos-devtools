@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from sourceosctl.commands import portable_ai
+from sourceosctl.commands import portable_ai, portable_ai_byom
 
 
 SURFACES = [
@@ -13,6 +13,24 @@ SURFACES = [
     "bearbrowser",
     "local-web",
     "anythingllm-adapter",
+]
+
+BYOM_TASK_CLASSES = [
+    "operator-selected",
+    "router",
+    "triage",
+    "summarization",
+    "rewrite",
+    "office-assist",
+    "artifact-drafting",
+    "coding-assist",
+    "repo-triage",
+    "privacy-first-chat",
+    "offline-fallback",
+    "operator-assist",
+    "evidence-inspection",
+    "workroom-local",
+    "field-workroom",
 ]
 
 
@@ -72,6 +90,58 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare_p.add_argument("--evidence-out", default=None, help="Optional evidence JSON path")
     prepare_p.set_defaults(func=portable_ai.prepare)
+
+    byom_p = sub.add_parser("byom", help="Bring-your-own local model helpers")
+    byom_sub = byom_p.add_subparsers(dest="byom_command", metavar="<subcommand>")
+    byom_sub.required = True
+    byom_verify_p = byom_sub.add_parser(
+        "verify",
+        help="Hash and verify a local model file, optionally writing a ModelCarryPack manifest",
+    )
+    byom_verify_p.add_argument("target_root", help="Prepared Portable AI Kit root")
+    byom_verify_p.add_argument("model_file", help="Local model file to verify; no download is performed")
+    byom_verify_p.add_argument("--name", default=None, help="Short model/pack slug")
+    byom_verify_p.add_argument("--display-name", default=None, help="Display name for the model pack")
+    byom_verify_p.add_argument("--pack-id", default=None, help="Optional full model-carry-pack URN")
+    byom_verify_p.add_argument(
+        "--license-ref",
+        default="operator-attestation-required",
+        help="License or attestation reference for the operator-supplied file",
+    )
+    byom_verify_p.add_argument("--source-note", default=None, help="Optional local provenance note")
+    byom_verify_p.add_argument(
+        "--task-class",
+        action="append",
+        choices=BYOM_TASK_CLASSES,
+        help="Allowed task class for this BYOM model; may be repeated",
+    )
+    byom_verify_p.add_argument(
+        "--copy",
+        action="store_true",
+        default=False,
+        help="Copy the local model file into target_root/models/blobs when executing",
+    )
+    byom_verify_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        dest="dry_run",
+        help="Render verification plan without writing manifest or copying model",
+    )
+    byom_verify_p.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Write BYOM ModelCarryPack manifest and optionally copy the file",
+    )
+    byom_verify_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm policy/operator approval for BYOM manifest materialization",
+    )
+    byom_verify_p.add_argument("--evidence-out", default=None, help="Optional evidence JSON path")
+    byom_verify_p.set_defaults(func=portable_ai_byom.verify)
 
     start_p = sub.add_parser(
         "start-plan",
