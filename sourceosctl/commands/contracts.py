@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 REQUIRED_REPO_MANIFEST_FIELDS = [
@@ -46,7 +46,7 @@ VALID_DOMAINS = {
 VALID_POLICY_CLASSES = {"low", "medium", "high", "critical"}
 
 
-def _load_json(path: Path) -> Tuple[Dict[str, Any] | None, List[str]]:
+def _load_json(path: Path) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     if not path.exists():
         return None, [f"missing file: {path}"]
     if not path.is_file():
@@ -161,7 +161,8 @@ def repo_scan(args: argparse.Namespace) -> int:
 def _candidate_repos(root: Path) -> Iterable[Path]:
     if (root / ".sourceos" / "manifest.json").exists():
         yield root
-    for child in sorted(root.iterdir()) if root.exists() and root.is_dir() else []:
+    children = sorted(root.iterdir()) if root.exists() and root.is_dir() else []
+    for child in children:
         if child.is_dir() and (child / ".sourceos" / "manifest.json").exists():
             yield child
 
@@ -222,7 +223,7 @@ def build_contract_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def contract_main(argv: List[str] | None = None) -> int:
+def contract_main(argv: Optional[List[str]] = None) -> int:
     parser = build_contract_parser()
     args = parser.parse_args(argv)
     return args.func(args) or 0
@@ -239,7 +240,7 @@ def build_repo_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def repo_main(argv: List[str] | None = None) -> int:
+def repo_main(argv: Optional[List[str]] = None) -> int:
     parser = build_repo_parser()
     args = parser.parse_args(argv)
     return args.func(args) or 0
@@ -256,13 +257,13 @@ def build_estate_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def estate_main(argv: List[str] | None = None) -> int:
+def estate_main(argv: Optional[List[str]] = None) -> int:
     parser = build_estate_parser()
     args = parser.parse_args(argv)
     return args.func(args) or 0
 
 
-def graph_main(argv: List[str] | None = None) -> int:
+def graph_main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="sourceosctl graph", description="SourceGraph helpers")
     sub = parser.add_subparsers(dest="graph_command", metavar="<subcommand>")
     sub.required = True
@@ -272,7 +273,7 @@ def graph_main(argv: List[str] | None = None) -> int:
     return args.func(args) or 0
 
 
-def sync_main(argv: List[str] | None = None) -> int:
+def sync_main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="sourceosctl sync", description="SourceSync helpers")
     sub = parser.add_subparsers(dest="sync_command", metavar="<subcommand>")
     sub.required = True
@@ -282,7 +283,7 @@ def sync_main(argv: List[str] | None = None) -> int:
     return args.func(args) or 0
 
 
-def policy_main(argv: List[str] | None = None) -> int:
+def policy_main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="sourceosctl policy", description="SourcePolicy helpers")
     sub = parser.add_subparsers(dest="policy_command", metavar="<subcommand>")
     sub.required = True
