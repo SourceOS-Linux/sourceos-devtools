@@ -16,7 +16,7 @@ It should contain:
 - lab/profile selection utilities;
 - local model-service client helpers;
 - model-router client utilities;
-- Portable AI Kit preflight, prepare, launch-plan, inspect, and evidence helpers;
+- Portable AI Kit preflight, prepare, BYOM verification, launch-plan, inspect, and evidence helpers;
 - guardrail/eval/evidence helpers;
 - agent sandbox/run helpers;
 - fingerprint and proof bundle tools;
@@ -49,6 +49,16 @@ python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile lapto
 python3 bin/sourceosctl portable-ai start-plan /Volumes/SOURCEOS_AI --surface turtleterm
 python3 bin/sourceosctl portable-ai inspect /Volumes/SOURCEOS_AI
 ```
+
+BYOM GGUF/local model verification path:
+
+```bash
+python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile byom-gguf --execute --policy-ok
+python3 bin/sourceosctl portable-ai byom verify /Volumes/SOURCEOS_AI ./models/example.gguf --name example --license-ref operator-attestation-required
+python3 bin/sourceosctl portable-ai byom verify /Volumes/SOURCEOS_AI ./models/example.gguf --name example --license-ref operator-attestation-required --execute --policy-ok --evidence-out ./byom-evidence.json
+```
+
+BYOM verification hashes a local file, records size and SHA-256, and emits a `ModelCarryPack` manifest. It does **not** download a model, contact a provider, start a runtime, grant network, grant tool use, or store prompt bodies.
 
 Portable AI Kit does **not** download model weights implicitly, start local daemons implicitly, run inference during preflight, or authorize prompt egress by default. Runtime activation belongs to Agent Machine. Model pack definitions belong to `SourceOS-Linux/sourceos-model-carry`. Routing belongs to `SocioProphet/model-router` under Policy Fabric posture.
 
