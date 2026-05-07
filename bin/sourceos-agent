@@ -6,6 +6,6 @@ import sys
 # Allow running directly from the repo root without installing.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sourceosctl.commands.local_agent import main
+from sourceosctl.commands.local_agent_registry_cli import main
 
 sys.exit(main())
