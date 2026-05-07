@@ -36,7 +36,6 @@ REQUIRED_QUADLET_SNIPPETS = [
 FORBIDDEN_SNIPPETS = [
     "Restart=always",
     "Pull=always",
-    "AutoUpdate=registry",
     "/tmp/",
 ]
 
@@ -51,6 +50,11 @@ def validate_template(path: pathlib.Path) -> list[Finding]:
     for snippet in FORBIDDEN_SNIPPETS:
         if snippet in text:
             findings.append(Finding(str(path), "high", f"forbidden snippet: {snippet}"))
+    if path.name.endswith(".container.tmpl"):
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("AutoUpdate=") and stripped != "AutoUpdate=registry-disabled":
+                findings.append(Finding(str(path), "high", f"forbidden AutoUpdate setting: {stripped}"))
     return findings
 
 
