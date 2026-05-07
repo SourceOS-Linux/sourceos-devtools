@@ -16,7 +16,7 @@ It should contain:
 - lab/profile selection utilities;
 - local model-service client helpers;
 - model-router client utilities;
-- Portable AI Kit preflight, prepare, BYOM verification, launch-plan, inspect, and evidence helpers;
+- Portable AI Kit preflight, prepare, BYOM verification, runtime start/stop plans, inspect, and evidence helpers;
 - guardrail/eval/evidence helpers;
 - agent sandbox/run helpers;
 - fingerprint and proof bundle tools;
@@ -47,6 +47,7 @@ python3 bin/sourceosctl portable-ai preflight /Volumes/SOURCEOS_AI
 python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile laptop-safe --dry-run
 python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile laptop-safe --execute --policy-ok --evidence-out ./portable-ai-evidence.json
 python3 bin/sourceosctl portable-ai start-plan /Volumes/SOURCEOS_AI --surface turtleterm
+python3 bin/sourceosctl portable-ai stop-plan /Volumes/SOURCEOS_AI
 python3 bin/sourceosctl portable-ai inspect /Volumes/SOURCEOS_AI
 ```
 
@@ -56,7 +57,17 @@ BYOM GGUF/local model verification path:
 python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile byom-gguf --execute --policy-ok
 python3 bin/sourceosctl portable-ai byom verify /Volumes/SOURCEOS_AI ./models/example.gguf --name example --license-ref operator-attestation-required
 python3 bin/sourceosctl portable-ai byom verify /Volumes/SOURCEOS_AI ./models/example.gguf --name example --license-ref operator-attestation-required --execute --policy-ok --evidence-out ./byom-evidence.json
+python3 bin/sourceosctl portable-ai start-plan /Volumes/SOURCEOS_AI --provider ollama-compatible --surface turtleterm --model example
 ```
+
+Runtime planning path:
+
+```bash
+python3 bin/sourceosctl portable-ai start-plan /Volumes/SOURCEOS_AI --provider ollama-compatible --host 127.0.0.1 --port 11434 --surface turtleterm
+python3 bin/sourceosctl portable-ai stop-plan /Volumes/SOURCEOS_AI --provider ollama-compatible --host 127.0.0.1 --port 11434
+```
+
+`start-plan` emits runtime environment variables, local endpoint refs, command hints such as `ollama serve`, surface handoff data, model-pack selection, and Agent Machine activation requirements. `stop-plan` emits teardown guidance and safe-eject prerequisites. Neither command starts daemons, kills processes, downloads models, grants network, grants tool use, or stores prompt bodies.
 
 BYOM verification hashes a local file, records size and SHA-256, and emits a `ModelCarryPack` manifest. It does **not** download a model, contact a provider, start a runtime, grant network, grant tool use, or store prompt bodies.
 
