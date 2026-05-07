@@ -1,0 +1,41 @@
+{
+  "operation": {
+    "schema_version": "0.1.0",
+    "operation_id": "op_terminal_command_sample_001",
+    "operation_type": "sourceos.terminal-command.replay",
+    "status": "completed",
+    "idempotency_key": "idem_op_terminal_command_sample_001",
+    "task_ids": [
+      "task_terminal_command_sample_001"
+    ],
+    "artifact_ids": [
+      "artifact_terminal_command_sample_001"
+    ],
+    "decision_ids": [],
+    "policy_gate_ids": []
+  },
+  "task": {
+    "schema_version": "0.1.0",
+    "task_id": "task_terminal_command_sample_001",
+    "operation_id": "op_terminal_command_sample_001",
+    "task_type": "sourceos.terminal-command.task",
+    "status": "completed",
+    "retryable": true,
+    "idempotency_key": "idem_task_terminal_command_sample_001"
+  },
+  "event": {
+    "schema_version": "0.1.0",
+    "event_id": "event_terminal_command_sample_001",
+    "event_type": "terminal-command.completed",
+    "operation_id": "op_terminal_command_sample_001",
+    "task_id": "task_terminal_command_sample_001"
+  },
+  "artifact": {
+    "schema_version": "0.1.0",
+    "artifact_id": "artifact_terminal_command_sample_001",
+    "artifact_type": "diagnostic_bundle",
+    "created_by_operation_id": "op_terminal_command_sample_001",
+    "admission_state": "admitted",
+    "activation_state": "active"
+  }
+}

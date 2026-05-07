@@ -89,6 +89,11 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl office convert <path> --to <format> --execute --policy-ok` | Run guarded local LibreOffice conversion and emit OfficeArtifactEvidence |
 | `sourceosctl office inspect <path>` | Inspect a local office artifact file and hash it |
 | `sourceosctl office evidence inspect <path>` | Inspect Office Plane evidence JSON (read-only) |
+| `sourceosctl operation conformance --contracts-dir ../prophet-core-contracts` | Run Workspace Operation fixture bundle conformance checks |
+| `sourceosctl operation validate-fixture <path>` | Validate one Workspace Operation fixture |
+| `sourceosctl operation replay-fixture <output> --surface terminal-command\|browser-capture\|local-agent-execution` | Generate a local replay fixture starter |
+| `sourceosctl operation scaffold-adapter <output-dir>` | Scaffold starter adapter skeletons |
+| `sourceosctl diagnostics redact <input> --output <output>` | Export redacted diagnostics (cookies/tokens/keys/IDs/prompts/policy snippets) |
 
 ### Running from the repo
 
@@ -127,6 +132,11 @@ python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type sp
 python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type slide-deck --format pptx --title "Demo Deck" --evidence-out ./office-pptx-evidence.json
 python3 bin/sourceosctl office convert ./example.docx --to pdf --dry-run
 python3 bin/sourceosctl office convert ./example.docx --to pdf --execute --policy-ok --evidence-out ./office-convert-evidence.json
+python3 bin/sourceos operation conformance --contracts-dir ../prophet-core-contracts
+python3 bin/sourceos operation validate-fixture tests/fixtures/workspace-operation/minimal-operation.json --structural-only
+python3 bin/sourceos operation replay-fixture ./tmp-operation-replay.json --surface terminal-command
+python3 bin/sourceos operation scaffold-adapter ./tmp-adapter
+python3 bin/sourceos diagnostics redact ./diagnostic.log --output ./diagnostic.redacted.log
 ```
 
 ### Local Model Door defaults
