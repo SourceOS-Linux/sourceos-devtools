@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from sourceosctl.commands import portable_ai, portable_ai_byom
+from sourceosctl.commands import portable_ai, portable_ai_byom, portable_ai_runtime
 
 
 SURFACES = [
@@ -32,6 +32,18 @@ BYOM_TASK_CLASSES = [
     "workroom-local",
     "field-workroom",
 ]
+
+
+def add_runtime_common(p: argparse.ArgumentParser) -> None:
+    p.add_argument("target_root", help="Target USB/SSD portable root")
+    p.add_argument(
+        "--provider",
+        default=portable_ai_runtime.DEFAULT_PROVIDER,
+        choices=portable_ai_runtime.SUPPORTED_PROVIDERS,
+        help="Local runtime provider class",
+    )
+    p.add_argument("--host", default=portable_ai_runtime.DEFAULT_HOST, help="Loopback host bind address")
+    p.add_argument("--port", type=int, default=portable_ai_runtime.DEFAULT_PORT, help="Local runtime port")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -147,14 +159,22 @@ def build_parser() -> argparse.ArgumentParser:
         "start-plan",
         help="Render a local runtime/surface launch plan without starting daemons",
     )
-    start_p.add_argument("target_root", help="Target USB/SSD portable root")
+    add_runtime_common(start_p)
     start_p.add_argument(
         "--surface",
         default="turtleterm",
         choices=SURFACES,
         help="Launch surface",
     )
-    start_p.set_defaults(func=portable_ai.start_plan)
+    start_p.add_argument("--model", default=None, help="Optional pack id, display name, or model name to select")
+    start_p.set_defaults(func=portable_ai_runtime.start_plan)
+
+    stop_p = sub.add_parser(
+        "stop-plan",
+        help="Render a local runtime teardown plan without killing processes",
+    )
+    add_runtime_common(stop_p)
+    stop_p.set_defaults(func=portable_ai_runtime.stop_plan)
 
     inspect_p = sub.add_parser("inspect", help="Inspect portable root layout state")
     inspect_p.add_argument("target_root", help="Target USB/SSD portable root")
