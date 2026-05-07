@@ -191,9 +191,43 @@ class TestPortableAICommands(unittest.TestCase):
             self.assertTrue(payload["manifestWritten"])
             self.assertFalse(payload["downloadedModel"])
 
-    def test_start_plan(self):
+    def test_start_plan_emits_runtime_env_and_command_without_starting(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            self.assertEqual(portable_ai_main(["start-plan", tmpdir, "--surface", "turtleterm"]), 0)
+            captured = {}
+
+            def capture(payload):
+                captured.update(payload)
+                return 0
+
+            with mock.patch("sourceosctl.commands.portable_ai_runtime._print_json", side_effect=capture):
+                self.assertEqual(portable_ai_main(["start-plan", tmpdir, "--surface", "turtleterm"]), 0)
+
+            self.assertEqual(captured["type"], "PortableAIStartPlan")
+            self.assertEqual(captured["provider"], "ollama-compatible")
+            self.assertEqual(captured["bindAddress"], "127.0.0.1")
+            self.assertEqual(captured["port"], 11434)
+            self.assertIn("OLLAMA_MODELS", captured["runtimeEnv"])
+            self.assertEqual(captured["runtimeCommand"], ["ollama", "serve"])
+            self.assertFalse(captured["wouldStartRuntime"])
+            self.assertFalse(captured["wouldDownloadModel"])
+            self.assertTrue(captured["requiresAgentMachineActivation"])
+
+    def test_stop_plan_does_not_kill_processes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            captured = {}
+
+            def capture(payload):
+                captured.update(payload)
+                return 0
+
+            with mock.patch("sourceosctl.commands.portable_ai_runtime._print_json", side_effect=capture):
+                self.assertEqual(portable_ai_main(["stop-plan", tmpdir]), 0)
+
+            self.assertEqual(captured["type"], "PortableAIStopPlan")
+            self.assertFalse(captured["wouldStopRuntime"])
+            self.assertFalse(captured["wouldKillProcesses"])
+            self.assertTrue(captured["requiresOperatorConfirmation"])
+            self.assertTrue(captured["requiresAgentMachineTeardown"])
 
     def test_inspect(self):
         with tempfile.TemporaryDirectory() as tmpdir:
