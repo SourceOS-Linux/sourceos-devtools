@@ -16,7 +16,7 @@ FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "workspace-operation" / "minimal-o
 
 
 class TestOperationCommands(unittest.TestCase):
-    def test_validate_fixture_passes_for_smoke_fixture(self):
+    def test_validate_fixture_passes_for_minimal_operation(self):
         self.assertEqual(operation.operation_main(["validate-fixture", str(FIXTURE), "--structural-only"]), 0)
 
     def test_conformance_passes_for_local_fixture_dir(self):

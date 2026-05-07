@@ -17,8 +17,10 @@ def _repo_root() -> Path:
 def _load_conformance_module():
     module_path = _repo_root() / "tools" / "sourceos_operation_conformance.py"
     spec = importlib.util.spec_from_file_location("sourceos_operation_conformance", module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load conformance module from {module_path}")
+    if spec is None:
+        raise RuntimeError(f"unable to create conformance module spec from {module_path}")
+    if spec.loader is None:
+        raise RuntimeError(f"conformance module spec has no loader: {module_path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -34,6 +36,7 @@ def _as_list(value: Any) -> list[Any]:
 
 
 def _validate_state_machine(path: Path, data: Dict[str, Any], errors: List[str]) -> None:
+    """Validate lightweight status/event consistency beyond structural shape checks."""
     operation = data.get("operation") or {}
     operation_status = operation.get("status")
     allowed = {
@@ -74,7 +77,7 @@ def validate_fixture(args: argparse.Namespace) -> int:
     results = module.ValidationErrorSet()
     try:
         data = module.load_json(fixture)
-    except Exception as exc:  # noqa: BLE001
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
         print(json.dumps({"type": "OperationFixtureValidation", "result": "fail", "errors": [f"{fixture}: failed to parse JSON: {exc}"]}, indent=2, sort_keys=True))
         return 1
 
@@ -102,11 +105,11 @@ def replay_fixture(args: argparse.Namespace) -> int:
         print(json.dumps({"type": "OperationReplayFixture", "result": "fail", "errors": [f"output file exists: {output}; use --force to overwrite"]}, indent=2, sort_keys=True))
         return 1
 
-    surface_prefix = args.surface.replace("-", "_")
-    operation_id = f"op_{surface_prefix}_fixture_001"
-    task_id = f"task_{surface_prefix}_fixture_001"
-    artifact_id = f"artifact_{surface_prefix}_fixture_001"
-    event_id = f"event_{surface_prefix}_fixture_001"
+    surface_normalized = args.surface.replace("-", "_")
+    operation_id = f"op_{surface_normalized}_fixture_001"
+    task_id = f"task_{surface_normalized}_fixture_001"
+    artifact_id = f"artifact_{surface_normalized}_fixture_001"
+    event_id = f"event_{surface_normalized}_fixture_001"
     payload = {
         "operation": {
             "schema_version": "0.1.0",
@@ -201,12 +204,13 @@ def conformance(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    default_examples_dir = _repo_root() / "tests" / "fixtures" / "workspace-operation"
     parser = argparse.ArgumentParser(prog="sourceosctl operation", description="Workspace Operation Plane tooling")
     sub = parser.add_subparsers(dest="operation_command", required=True)
 
     validate_p = sub.add_parser("validate-fixture", help="Validate a Workspace Operation fixture JSON")
     validate_p.add_argument("fixture")
-    validate_p.add_argument("--schemas-dir", default="../prophet-core-contracts/schemas")
+    validate_p.add_argument("--schemas-dir", default=None)
     validate_p.add_argument("--structural-only", action="store_true", default=False)
     validate_p.set_defaults(func=validate_fixture)
 
@@ -227,8 +231,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     conformance_p = sub.add_parser("conformance", help="Run fixture bundle conformance checks")
     conformance_p.add_argument("--contracts-dir", default=None)
-    conformance_p.add_argument("--examples-dir", default="../prophet-core-contracts/examples/workspace-operation")
-    conformance_p.add_argument("--schemas-dir", default="../prophet-core-contracts/schemas")
+    conformance_p.add_argument(
+        "--examples-dir",
+        default=str(default_examples_dir),
+    )
+    conformance_p.add_argument("--schemas-dir", default=None)
     conformance_p.add_argument("--structural-only", action="store_true", default=False)
     conformance_p.set_defaults(func=conformance)
 

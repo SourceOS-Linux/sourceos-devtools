@@ -1,5 +1,6 @@
 """Unit tests for sourceosctl diagnostics commands."""
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -39,6 +40,27 @@ class TestDiagnosticsCommands(unittest.TestCase):
             self.assertIn("<redacted-token>", redacted)
             self.assertIn("<redacted-prompt>", redacted)
             self.assertIn("<redacted-policy-snippet>", redacted)
+
+    def test_redact_json_preserves_json_shape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            in_path = pathlib.Path(tmp) / "diagnostic.json"
+            out_path = pathlib.Path(tmp) / "diagnostic.redacted.json"
+            in_path.write_text(
+                json.dumps(
+                    {
+                        "user_id": "user-123",
+                        "prompt": "Line one\nLine two",
+                        "authorization": "Bearer abcDEF123",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            rc = diagnostics.diagnostics_main(["redact", str(in_path), "--output", str(out_path)])
+            self.assertEqual(rc, 0)
+            payload = json.loads(out_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["user_id"], "<redacted-id>")
+            self.assertEqual(payload["prompt"], "<redacted-prompt>")
+            self.assertEqual(payload["authorization"], "<redacted-secret>")
 
 
 if __name__ == "__main__":

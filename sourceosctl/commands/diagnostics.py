@@ -8,20 +8,28 @@ import re
 from pathlib import Path
 
 
+REDACTION_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
+    ("cookies", re.compile(r"(?i)(\bcookie\s*[:=]\s*)([^\n]+)"), r"\1<redacted-cookie>"),
+    ("bearer", re.compile(r"(?i)\bbearer\s+[a-zA-Z0-9._~+/=-]+"), "Bearer <redacted-token>"),
+    # Token-bearing identity fields (quoted JSON value or plain token blob).
+    ("oauth", re.compile(r'(?is)("?(?:access_token|refresh_token|oauth_token|id_token)"?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|[^,\s]+)'), r'\1"<redacted-token>"'),
+    ("api_keys", re.compile(r'(?is)("?(?:api[_-]?key|x-api-key|apikey|client_secret|authorization)"?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|[^,\s]+)'), r'\1"<redacted-secret>"'),
+    ("secrets", re.compile(r'(?is)("?(?:secret|password|token)"?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|[^,\s]+)'), r'\1"<redacted-secret>"'),
+    ("sensitive_ids", re.compile(r'(?is)("?(?:user|account|session|device|customer|tenant|workspace|organization|org|principal|subject)_id"?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|[^,\s]+)'), r'\1"<redacted-id>"'),
+    # Prompt-bearing fields, including escaped multi-line quoted strings.
+    (
+        "model_prompts",
+        re.compile(r'(?is)("?(?:prompt|model_prompt|system_prompt|user_prompt)"?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|[^,\n]+)'),
+        r'\1"<redacted-prompt>"',
+    ),
+    ("policy_marked", re.compile(r"(?is)<policy-marked>.*?</policy-marked>"), "<policy-marked><redacted-policy-snippet></policy-marked>"),
+]
+
+
 def _redact(raw: str) -> tuple[str, dict[str, int]]:
-    patterns: list[tuple[str, re.Pattern[str], str]] = [
-        ("cookies", re.compile(r"(?i)(\bcookie\s*[:=]\s*)([^\n]+)"), r"\1<redacted-cookie>"),
-        ("bearer", re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]+"), "Bearer <redacted-token>"),
-        ("oauth", re.compile(r'(?i)("?(?:access_token|refresh_token|oauth_token|id_token)"?\s*[:=]\s*)(".*?"|[^,\s]+)'), r'\1"<redacted-token>"'),
-        ("api_keys", re.compile(r'(?i)("?(?:api[_-]?key|x-api-key|apikey|client_secret|authorization)"?\s*[:=]\s*)(".*?"|[^,\s]+)'), r'\1"<redacted-secret>"'),
-        ("secrets", re.compile(r'(?i)("?(?:secret|password|token)"?\s*[:=]\s*)(".*?"|[^,\s]+)'), r'\1"<redacted-secret>"'),
-        ("sensitive_ids", re.compile(r'(?i)("?(?:user|account|session|device|customer|tenant|workspace|organization|org|principal|subject)_id"?\s*[:=]\s*)(".*?"|[^,\s]+)'), r'\1"<redacted-id>"'),
-        ("model_prompts", re.compile(r'(?i)("?(?:prompt|model_prompt|system_prompt|user_prompt)"?\s*[:=]\s*)(".*?"|[^,\n]+)'), r'\1"<redacted-prompt>"'),
-        ("policy_marked", re.compile(r"(?is)<policy-marked>.*?</policy-marked>"), "<policy-marked><redacted-policy-snippet></policy-marked>"),
-    ]
     counts: dict[str, int] = {}
     redacted = raw
-    for name, pattern, replacement in patterns:
+    for name, pattern, replacement in REDACTION_PATTERNS:
         redacted, count = pattern.subn(replacement, redacted)
         if count:
             counts[name] = count
