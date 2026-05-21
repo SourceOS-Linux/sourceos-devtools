@@ -44,6 +44,16 @@ if len(sys.argv) > 1 and sys.argv[1] == "reasoning":
 
     sys.exit(reasoning_main(sys.argv[2:]))
 
+if len(sys.argv) > 1 and sys.argv[1] == "operation":
+    from sourceosctl.commands.operation import operation_main
+
+    sys.exit(operation_main(sys.argv[2:]))
+
+if len(sys.argv) > 1 and sys.argv[1] == "diagnostics":
+    from sourceosctl.commands.diagnostics import diagnostics_main
+
+    sys.exit(diagnostics_main(sys.argv[2:]))
+
 if len(sys.argv) > 1 and sys.argv[1] == "network":
     from sourceosctl.commands.network import network_main
 

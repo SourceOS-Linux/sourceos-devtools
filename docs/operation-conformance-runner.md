@@ -42,6 +42,28 @@ python3 tools/sourceos_operation_conformance.py \
   --schemas-dir ../prophet-core-contracts/schemas
 ```
 
+From `~/dev/sourceos-devtools`, the first-class CLI wrappers are:
+
+```bash
+python3 bin/sourceos operation conformance \
+  --contracts-dir ../prophet-core-contracts
+
+python3 bin/sourceos operation validate-fixture \
+  tests/fixtures/workspace-operation/minimal-operation.json \
+  --structural-only
+
+python3 bin/sourceos operation replay-fixture \
+  ./tmp-operation-replay.json \
+  --surface terminal-command
+
+python3 bin/sourceos operation scaffold-adapter \
+  ./tmp-adapter
+
+python3 bin/sourceos diagnostics redact \
+  ./diagnostic.log \
+  --output ./diagnostic.redacted.log
+```
+
 ## What structural validation checks
 
 - Every fixture is operation-centered.
@@ -69,10 +91,8 @@ If `jsonschema` is installed, the runner also validates objects against:
 
 This optional path is the bridge between the lightweight contract validation currently in `prophet-core-contracts` and a reusable SourceOS conformance runner that downstream repos can invoke.
 
-## Next work
+## Included sample fixtures
 
-- Add a CLI wrapper once the repo's command layout is standardized.
-- Add adapter scaffolding commands.
-- Add redaction CLI for diagnostic bundles.
-- Emit machine-readable validation reports.
-- Add fixture-generation helpers for terminal, browser, local agent-machine, sync, and release operations.
+- `tests/fixtures/workspace-operation/terminal-command-sample.json`
+- `tests/fixtures/workspace-operation/browser-capture-sample.json`
+- `tests/fixtures/workspace-operation/local-agent-execution-sample.json`
