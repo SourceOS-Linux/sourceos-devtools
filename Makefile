@@ -1,6 +1,6 @@
-.PHONY: validate test scan-local-persistence validate-local-agents validate-local-agent-templates check-local-agent-drift validate-reasoning-cli
+.PHONY: validate test scan-local-persistence validate-local-agents validate-local-agent-templates check-local-agent-drift validate-reasoning-cli validate-portable-ai validate-packaging
 
-validate: test scan-local-persistence validate-local-agents validate-local-agent-templates check-local-agent-drift validate-reasoning-cli
+validate: test scan-local-persistence validate-local-agents validate-local-agent-templates check-local-agent-drift validate-reasoning-cli validate-portable-ai validate-packaging
 	@test -f README.md
 	@test -f AGENTS.md
 	@test -f .github/copilot-instructions.md
@@ -29,3 +29,11 @@ validate-reasoning-cli:
 	@python3 bin/sourceosctl reasoning inspect tests/fixtures/reasoning/deterministic >/dev/null
 	@python3 bin/sourceosctl reasoning replay-plan tests/fixtures/reasoning/deterministic >/dev/null
 	@python3 bin/sourceosctl reasoning events tests/fixtures/reasoning/deterministic >/dev/null
+
+validate-portable-ai:
+	@python3 bin/sourceosctl portable-ai profiles >/dev/null
+	@python3 bin/sourceosctl portable-ai preflight /tmp/SOURCEOS_AI --profile tiny-router >/dev/null
+	@python3 bin/sourceosctl portable-ai prepare /tmp/SOURCEOS_AI --profile tiny-router --dry-run >/dev/null
+
+validate-packaging:
+	@python3 scripts/validate_packaging.py
