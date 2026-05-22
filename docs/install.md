@@ -15,7 +15,7 @@ python3 bin/sourceosctl portable-ai stop-plan /tmp/SOURCEOS_AI --provider ollama
 python3 bin/sourceosctl portable-ai byom verify /tmp/SOURCEOS_AI ./models/example.gguf --name example
 ```
 
-The default posture is evidence-first and non-mutating. Prompt egress is denied by default. Tool use is denied by default. Runtime start and stop commands emit plans; they do not launch or stop a provider.
+The default posture is evidence-first and non-mutating. prompt egress is denied by default. Tool use is denied by default. Runtime start and stop commands emit plans; they do not launch or stop a provider.
 
 ## Homebrew scaffold
 
