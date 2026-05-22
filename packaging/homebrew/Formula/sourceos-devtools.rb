@@ -19,6 +19,9 @@ class SourceosDevtools < Formula
         sourceosctl portable-ai profiles
         sourceos-portable-ai profiles
 
+      Expected smoke marker:
+        PortableAIProfiles
+
       This formula is a packaging scaffold. Runtime activation and policy gates remain in source repositories.
     EOS
   end
