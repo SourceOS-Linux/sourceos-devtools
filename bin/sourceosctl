@@ -64,6 +64,11 @@ if len(sys.argv) > 1 and sys.argv[1] == "native-assistant":
 
     sys.exit(native_assistant_main(sys.argv[2:]))
 
+if len(sys.argv) > 1 and sys.argv[1] == "portable-ai":
+    from sourceosctl.commands.portable_ai_cli import main as portable_ai_main
+
+    sys.exit(portable_ai_main(sys.argv[2:]))
+
 if len(sys.argv) > 1 and sys.argv[1] == "local-agent":
     from sourceosctl.commands.local_agent_registry_cli import main as local_agent_main
 
