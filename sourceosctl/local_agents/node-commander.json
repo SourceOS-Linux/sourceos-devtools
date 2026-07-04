@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "sourceos.local-agent.v1",
+  "name": "node-commander",
+  "label": "org.socioprophet.node-commander",
+  "scope": "user",
+  "runtime": "podman",
+  "owner": {
+    "project": "SocioProphet",
+    "component": "node-commander",
+    "contact": "platform"
+  },
+  "container": {
+    "name": "node-commander",
+    "runtimeImage": "localhost/socioprophet/node-commander:dev-boot",
+    "sourceImage": "us-central1-docker.pkg.dev/socioprophet-web/node-commander/node-commander:dev-boot",
+    "pullPolicy": "never"
+  },
+  "podman": {
+    "connection": "podman-machine-default",
+    "requireMachine": true,
+    "requireLocalImage": true,
+    "rootless": true
+  },
+  "auth": {
+    "mode": "empty-authfile",
+    "authfile": "~/.config/containers/empty-auth.json",
+    "allowAmbientDockerConfig": false,
+    "allowInteractiveCredentialHelper": false
+  },
+  "macos": {
+    "launchd": {
+      "plist": "~/Library/LaunchAgents/org.socioprophet.node-commander.plist",
+      "legacySystemPlist": "/Library/LaunchAgents/org.socioprophet.node-commander.plist",
+      "runAtLoad": true,
+      "keepAlive": false
+    }
+  },
+  "linux": {
+    "systemdUserUnit": "~/.config/systemd/user/org.socioprophet.node-commander.service",
+    "restart": "on-failure",
+    "restartSec": 10,
+    "startLimitIntervalSec": 3600,
+    "startLimitBurst": 3
+  },
+  "logs": {
+    "directory": "~/Library/Logs/SocioProphet",
+    "app": "~/Library/Logs/SocioProphet/node-commander.log"
+  },
+  "health": {
+    "type": "podman-container",
+    "expected": "running"
+  },
+  "quarantine": {
+    "captureServiceDefinition": true,
+    "captureLogs": true,
+    "captureRuntimeState": true,
+    "captureImageMetadata": true,
+    "captureRedactedAuthConfig": true
+  }
+}

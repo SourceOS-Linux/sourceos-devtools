@@ -1,0 +1,19 @@
+[Unit]
+Description=SourceOS local agent container: {{name}}
+Documentation=https://github.com/SourceOS-Linux/sourceos-spec
+
+[Container]
+ContainerName={{container_name}}
+Image={{runtime_image}}
+Pull=never
+AuthFile={{authfile}}
+AutoUpdate=registry-disabled
+
+[Service]
+Restart={{restart}}
+RestartSec={{restart_sec}}
+StartLimitIntervalSec={{start_limit_interval_sec}}
+StartLimitBurst={{start_limit_burst}}
+
+[Install]
+WantedBy=default.target

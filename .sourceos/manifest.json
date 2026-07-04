@@ -1,0 +1,23 @@
+{
+  "repo": "SourceOS-Linux/sourceos-devtools",
+  "domain": "tooling",
+  "specVersion": "0.1.0",
+  "ownedSchemas": [],
+  "syncEngines": [],
+  "sourceChannels": [],
+  "policyClasses": [
+    "high"
+  ],
+  "auditEvents": [
+    "devtools.contract.validated",
+    "devtools.repo.scanned"
+  ],
+  "dangerousSurfaces": [
+    "devtools.schema.validation_bypass",
+    "devtools.repo_scan.incomplete"
+  ],
+  "authorityRepos": [
+    "SourceOS-Linux/sourceos-spec"
+  ],
+  "notes": "Developer/operator tooling surface for SourceOS contract validation, repo scanning, graph doctor, sync doctor, and policy explanation commands."
+}

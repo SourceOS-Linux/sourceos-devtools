@@ -1,0 +1,67 @@
+{
+  "operation": {
+    "schema_version": "0.1.0",
+    "operation_id": "op_devtools_smoke_001",
+    "operation_type": "devtools.conformance.smoke",
+    "actor": {
+      "actor_type": "system",
+      "actor_id": "sourceos-devtools"
+    },
+    "target": {
+      "ref_type": "local_device_cache",
+      "ref_id": "devtools_smoke"
+    },
+    "status": "completed",
+    "priority": "normal",
+    "trace_id": "trace_devtools_smoke_001",
+    "idempotency_key": "idem_devtools_smoke_001",
+    "trust_boundary_ids": [],
+    "task_ids": [
+      "task_devtools_smoke_001"
+    ],
+    "artifact_ids": [
+      "artifact_devtools_smoke_001"
+    ],
+    "policy_gate_ids": [],
+    "decision_ids": [],
+    "created_at": "2026-05-05T02:00:00Z",
+    "updated_at": "2026-05-05T02:00:01Z"
+  },
+  "task": {
+    "schema_version": "0.1.0",
+    "task_id": "task_devtools_smoke_001",
+    "operation_id": "op_devtools_smoke_001",
+    "task_type": "devtools.conformance.smoke",
+    "title": "Validate local smoke fixture",
+    "artifact_type": "diagnostic_bundle",
+    "status": "completed",
+    "stage": "validated",
+    "progress": 1,
+    "retry_count": 0,
+    "retryable": true,
+    "auto_retry_allowed": false,
+    "idempotency_key": "idem_task_devtools_smoke_001",
+    "final_artifact_id": "artifact_devtools_smoke_001"
+  },
+  "artifact": {
+    "schema_version": "0.1.0",
+    "artifact_id": "artifact_devtools_smoke_001",
+    "artifact_type": "diagnostic_bundle",
+    "display_name": "devtools smoke result",
+    "stable_identity": "workspace://artifact/artifact_devtools_smoke_001",
+    "content_hash": "sha256:devtools-smoke",
+    "content_uri": "object://local/artifact_devtools_smoke_001/content",
+    "storage_backend": "local-test-fixture",
+    "target_context": {
+      "location_type": "local_device_cache",
+      "location_id": "devtools_smoke"
+    },
+    "created_by_operation_id": "op_devtools_smoke_001",
+    "policy_state": "passed",
+    "metadata_state": "complete",
+    "indexing_state": "not_requested",
+    "admission_state": "admitted",
+    "activation_state": "active",
+    "created_at": "2026-05-05T02:00:01Z"
+  }
+}

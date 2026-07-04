@@ -1,0 +1,16 @@
+[Unit]
+Description=SourceOS local agent: {{name}}
+Documentation=https://github.com/SourceOS-Linux/sourceos-spec
+After=default.target
+
+[Service]
+Type=simple
+ExecStart={{launcher_path}}
+Restart={{restart}}
+RestartSec={{restart_sec}}
+StartLimitIntervalSec={{start_limit_interval_sec}}
+StartLimitBurst={{start_limit_burst}}
+Environment=CONTAINERS_AUTH_FILE={{authfile}}
+
+[Install]
+WantedBy=default.target
