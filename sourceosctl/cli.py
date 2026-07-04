@@ -15,6 +15,7 @@ from sourceosctl.commands import (
     local_model,
     agent_machine,
     office,
+    mutation_evidence,
 )
 
 
@@ -41,6 +42,46 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_sub.required = True
     profiles_list_p = profiles_sub.add_parser("list", help="List available profiles")
     profiles_list_p.set_defaults(func=profiles.list_profiles)
+
+    # --- mutation-evidence ---
+    mutation_p = sub.add_parser(
+        "mutation-evidence",
+        help="Mutation and Evidence Accountability developer helpers",
+    )
+    mutation_sub = mutation_p.add_subparsers(
+        dest="mutation_evidence_command", metavar="<subcommand>"
+    )
+    mutation_sub.required = True
+
+    def add_spec_root(p):
+        p.add_argument(
+            "--spec-root",
+            default="../sourceos-spec",
+            help="Path to a sourceos-spec checkout containing the canonical schemas and fixtures",
+        )
+
+    mutation_plan_p = mutation_sub.add_parser(
+        "plan", help="Render the mutation/evidence validation integration plan"
+    )
+    add_spec_root(mutation_plan_p)
+    mutation_plan_p.set_defaults(func=mutation_evidence.plan)
+
+    mutation_inspect_p = mutation_sub.add_parser(
+        "inspect", help="Inspect a sourceos-spec checkout for mutation/evidence contract files"
+    )
+    add_spec_root(mutation_inspect_p)
+    mutation_inspect_p.set_defaults(func=mutation_evidence.inspect)
+
+    mutation_validate_p = mutation_sub.add_parser(
+        "validate", help="Run the canonical sourceos-spec mutation/evidence validator"
+    )
+    add_spec_root(mutation_validate_p)
+    mutation_validate_p.set_defaults(func=mutation_evidence.validate)
+
+    mutation_fixture_p = mutation_sub.add_parser(
+        "fixture-plan", help="List required valid and invalid fixture classes"
+    )
+    mutation_fixture_p.set_defaults(func=mutation_evidence.fixture_plan)
 
     # --- nlboot ---
     nlboot_p = sub.add_parser("nlboot", help="NLBoot operator helpers")
