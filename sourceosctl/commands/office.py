@@ -1,9 +1,9 @@
 """office command helpers.
 
 This module implements SourceOS Office Plane planning plus guarded local
-execution.  Dry-run remains the default.  File-writing behavior is available
-only behind --execute --policy-ok, writes only to explicit output roots, and
-emits OfficeArtifactEvidence-compatible JSON.
+execution and quality gates.  Dry-run remains the default.  File-writing
+behavior is available only behind --execute --policy-ok, writes only to
+explicit output roots, and emits OfficeArtifactEvidence-compatible JSON.
 """
 
 from __future__ import annotations
@@ -17,11 +17,16 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from sourceosctl.commands.office_runtime_contracts import build_office_runtime_contracts
-from sourceosctl.commands.ooxml import OOXML_GENERATION_FORMATS, write_ooxml_artifact
+from sourceosctl.commands.ooxml import (
+    OOXML_GENERATION_FORMATS,
+    validate_ooxml_artifact,
+    write_ooxml_artifact,
+)
 
 
 DEFAULT_WORKROOM_ID = "workroom-local-default"
@@ -228,6 +233,16 @@ def _artifact_output_path(args, fmt: str) -> Path:
     return Path(_expand(getattr(args, "output_root", DEFAULT_OUTPUT_ROOT))) / f"{_safe_slug(title)}.{fmt}"
 
 
+def _artifact_type_for_format(fmt: str) -> str:
+    if fmt in {"xlsx", "ods", "csv"}:
+        return "spreadsheet"
+    if fmt in {"pptx", "odp"}:
+        return "slide-deck"
+    if fmt == "pdf":
+        return "pdf"
+    return "document"
+
+
 def _build_evidence(
     *,
     plan: Dict[str, Any],
@@ -398,7 +413,8 @@ def generate(args) -> int:
             workroom_id=payload["officeArtifact"]["workroomId"],
             artifact_id=payload["officeArtifact"]["artifactId"],
         )
-        notes = "sourceosctl guarded minimal OOXML Office Plane artifact generation"
+        structural = validate_ooxml_artifact(output_path, fmt)
+        notes = f"sourceosctl guarded minimal OOXML Office Plane artifact generation; structuralValid={structural['valid']}"
 
     evidence = _build_evidence(
         plan=payload,
@@ -490,6 +506,95 @@ def convert(args) -> int:
     return _print_json(result) if status == "success" else (_print_json(result) or 1)
 
 
+def validate(args) -> int:
+    """Validate an Office artifact with structural and optional round-trip gates."""
+    path = Path(_expand(args.path))
+    fmt = getattr(args, "format", None) or path.suffix.lower().lstrip(".")
+    structural = validate_ooxml_artifact(path, fmt) if fmt in OOXML_GENERATION_FORMATS else {
+        "kind": "OOXMLStructuralValidation",
+        "format": fmt,
+        "path": str(path),
+        "valid": path.exists() and path.is_file(),
+        "requiredParts": [],
+        "missingParts": [],
+        "xmlErrors": [] if path.exists() and path.is_file() else ["artifact does not exist or is not a file"],
+        "zipEntries": [],
+    }
+
+    roundtrip = {
+        "requested": bool(getattr(args, "roundtrip", False)),
+        "executed": False,
+        "available": False,
+        "status": "skipped",
+        "outputRef": None,
+        "error": None,
+    }
+    if getattr(args, "roundtrip", False):
+        if not getattr(args, "policy_ok", False):
+            print("error: office validate --roundtrip requires --policy-ok", file=sys.stderr)
+            return 1
+        lo = _libreoffice_path()
+        roundtrip["available"] = lo is not None
+        if not lo:
+            roundtrip["status"] = "blocked"
+            roundtrip["error"] = "LibreOffice/soffice not found on PATH"
+        elif not path.exists() or not path.is_file():
+            roundtrip["status"] = "blocked"
+            roundtrip["error"] = "artifact does not exist or is not a file"
+        else:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                cmd = [lo, "--headless", "--convert-to", "pdf", "--outdir", tmpdir, str(path)]
+                completed = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=180)
+                expected = Path(tmpdir) / f"{path.stem}.pdf"
+                roundtrip["executed"] = True
+                roundtrip["status"] = "success" if completed.returncode == 0 and expected.exists() else "failure"
+                roundtrip["outputRef"] = str(expected.name) if expected.exists() else None
+                if completed.returncode != 0:
+                    roundtrip["error"] = f"stdout={completed.stdout[-200:]!r}; stderr={completed.stderr[-200:]!r}"
+
+    status = "success" if structural["valid"] and roundtrip["status"] in {"skipped", "success"} else "failure"
+    plan_args = type(
+        "Args",
+        (),
+        {
+            "artifact_type": _artifact_type_for_format(fmt),
+            "format": fmt,
+            "title": path.stem or "Office Artifact",
+            "workroom_id": getattr(args, "workroom_id", DEFAULT_WORKROOM_ID),
+            "output_root": DEFAULT_OUTPUT_ROOT,
+            "backend": "libreoffice",
+            "mode": "local-headless",
+            "execute": False,
+            "downloads_root": DEFAULT_DOWNLOADS_ROOT,
+            "template_root": DEFAULT_TEMPLATE_ROOT,
+        },
+    )()
+    plan = _artifact_plan(plan_args, "validate", format_override=fmt)
+    evidence = _build_evidence(
+        plan=plan,
+        operation="analyze",
+        status=status,
+        output_path=path if path.exists() and path.is_file() else None,
+        source_refs=[_redact_home(str(path)) or str(path)],
+        notes=f"structuralValid={structural['valid']}; roundtripStatus={roundtrip['status']}",
+    )
+    evidence_out = getattr(args, "evidence_out", None)
+    if evidence_out:
+        _write_json(evidence_out, evidence)
+
+    result = {
+        "type": "OfficeQualityGateResult",
+        "status": status,
+        "format": fmt,
+        "path": _redact_home(str(path)),
+        "structural": structural,
+        "roundtrip": roundtrip,
+        "evidenceOut": _redact_home(evidence_out) if evidence_out else None,
+        "evidence": None if evidence_out else evidence,
+    }
+    return _print_json(result) if status == "success" else (_print_json(result) or 1)
+
+
 def inspect(args) -> int:
     """Inspect an Office artifact file without modifying it."""
     path = Path(_expand(args.path))
@@ -512,6 +617,7 @@ def inspect(args) -> int:
         "supportedFormat": suffix in SUPPORTED_FORMATS,
         "mimeType": mime_type,
         "sha256": _sha256(path),
+        "qualityGate": validate_ooxml_artifact(path, suffix) if suffix in OOXML_GENERATION_FORMATS else None,
         "contracts": {
             "officeArtifactSchema": OFFICE_ARTIFACT_SCHEMA,
         },
