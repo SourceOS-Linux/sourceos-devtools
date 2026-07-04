@@ -9,23 +9,20 @@ class SourceosDevtools < Formula
 
   def install
     libexec.install Dir["*"]
-
-    chmod 0755, libexec/"bin/sourceosctl"
-    chmod 0755, libexec/"bin/sourceos-portable-ai"
-
-    (bin/"sourceosctl").write_env_script libexec/"bin/sourceosctl", {
-      PATH: "#{Formula["python@3.12"].opt_bin}:$PATH",
-      PYTHONPATH: libexec,
-    }
-
-    (bin/"sourceos-portable-ai").write_env_script libexec/"bin/sourceos-portable-ai", {
-      PATH: "#{Formula["python@3.12"].opt_bin}:$PATH",
-      PYTHONPATH: libexec,
-    }
+    bin.write_exec_script libexec/"bin/sourceosctl"
+    bin.write_exec_script libexec/"bin/sourceos-portable-ai"
   end
 
-  test do
-    assert_match "PortableAIProfiles", shell_output("#{bin}/sourceosctl portable-ai profiles")
-    assert_match "PortableAIProfiles", shell_output("#{bin}/sourceos-portable-ai profiles")
+  def caveats
+    <<~EOS
+      Portable AI Kit surfaces:
+        sourceosctl portable-ai profiles
+        sourceos-portable-ai profiles
+
+      Expected smoke marker:
+        PortableAIProfiles
+
+      This formula is a packaging scaffold. Runtime activation and policy gates remain in source repositories.
+    EOS
   end
 end

@@ -1,0 +1,64 @@
+{
+  "operation": {
+    "schema_version": "0.1.0",
+    "operation_id": "op_local_agent_execution_sample_001",
+    "operation_type": "sourceos.local-agent-execution.replay",
+    "status": "completed",
+    "idempotency_key": "idem_op_local_agent_execution_sample_001",
+    "task_ids": [
+      "task_local_agent_execution_sample_001"
+    ],
+    "artifact_ids": [
+      "artifact_local_agent_execution_sample_001"
+    ],
+    "decision_ids": [
+      "decision_local_agent_execution_sample_001"
+    ],
+    "policy_gate_ids": [
+      "gate_local_agent_execution_sample_001"
+    ]
+  },
+  "task": {
+    "schema_version": "0.1.0",
+    "task_id": "task_local_agent_execution_sample_001",
+    "operation_id": "op_local_agent_execution_sample_001",
+    "task_type": "sourceos.local-agent-execution.task",
+    "status": "completed",
+    "retryable": true,
+    "idempotency_key": "idem_task_local_agent_execution_sample_001"
+  },
+  "event": {
+    "schema_version": "0.1.0",
+    "event_id": "event_local_agent_execution_sample_001",
+    "event_type": "local-agent-execution.completed",
+    "operation_id": "op_local_agent_execution_sample_001",
+    "task_id": "task_local_agent_execution_sample_001"
+  },
+  "artifact": {
+    "schema_version": "0.1.0",
+    "artifact_id": "artifact_local_agent_execution_sample_001",
+    "artifact_type": "diagnostic_bundle",
+    "created_by_operation_id": "op_local_agent_execution_sample_001",
+    "admission_state": "admitted",
+    "activation_state": "active"
+  },
+  "decision": {
+    "schema_version": "0.1.0",
+    "decision_id": "decision_local_agent_execution_sample_001",
+    "status": "approved",
+    "options": [
+      "approve",
+      "reject"
+    ]
+  },
+  "policy_gate": {
+    "schema_version": "0.1.0",
+    "gate_id": "gate_local_agent_execution_sample_001",
+    "status": "cleared",
+    "responsible_actor": "sourceos-operator",
+    "remediation_options": [
+      "rerun-local-agent",
+      "inspect-evidence"
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+# This file is a stub Cargo.lock for fixture/inspection purposes only.
+version = 3
+
+[[package]]
+name = "nlboot-client"
+version = "0.1.0"

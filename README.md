@@ -2,7 +2,7 @@
 
 `sourceos-devtools` is the installable SourceOS developer/operator toolkit surface.
 
-It is the home for Linux-native developer tooling, AI operator tooling, lab profile selection, Nix/devshell orchestration, NLBoot/operator helpers, release tooling, local AI governance utilities, workstation bootstrap flows, and Portable AI Kit preparation flows.
+It is the home for Linux-native developer tooling, AI operator tooling, lab profile selection, Nix/devshell orchestration, NLBoot/operator helpers, release tooling, local AI governance utilities, and workstation bootstrap flows.
 
 ## Scope
 
@@ -16,9 +16,12 @@ It should contain:
 - lab/profile selection utilities;
 - local model-service client helpers;
 - model-router client utilities;
-- Portable AI Kit preflight, prepare, BYOM verification, runtime start/stop plans, inspect, and evidence helpers;
+- Network Door, Firewall Door, Mesh Door, BYOM provider, and Native Assistant Door plan/probe helpers;
 - guardrail/eval/evidence helpers;
 - agent sandbox/run helpers;
+- Local Model Door runtime detection and route planning helpers;
+- Agent Machine local mount and secure host-interface helpers;
+- Office Plane dry-run, guarded execution, inspection, and evidence helpers;
 - fingerprint and proof bundle tools;
 - local-to-mesh registration helpers;
 - release/operator install scripts.
@@ -33,56 +36,222 @@ It should not contain:
 - model-router backend;
 - web control plane backend;
 - SourceOS image build state;
-- secrets, tokens, credentials, private keys, or device-specific enrollment secrets.
+- secrets, tokens, credentials, private keys, or device-specific enrollment secrets;
+- firewall mutation engines;
+- service mesh installers;
+- native assistant runtime adapters.
 
-## Portable AI Kit
+## sourceosctl CLI
 
-Portable AI Kit is the pocketable local-AI appliance mode for SourceOS: prepare a USB drive or portable SSD once, carry a governed local AI workstation, and run it on a supported host without sending prompts or chat state off-device by default.
+`sourceosctl` is the guarded CLI surface for SourceOS developer and AI operator workflows. Commands are read-only or dry-run by default. Narrow local mutations require explicit `--execute --policy-ok` and emit evidence.
 
-Quick demo path from a checkout:
+### Usage
 
-```bash
-python3 bin/sourceosctl portable-ai profiles
-python3 bin/sourceosctl portable-ai preflight /Volumes/SOURCEOS_AI
-python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile laptop-safe --dry-run
-python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile laptop-safe --execute --policy-ok --evidence-out ./portable-ai-evidence.json
-python3 bin/sourceosctl portable-ai start-plan /Volumes/SOURCEOS_AI --surface turtleterm
-python3 bin/sourceosctl portable-ai stop-plan /Volumes/SOURCEOS_AI
-python3 bin/sourceosctl portable-ai inspect /Volumes/SOURCEOS_AI
+```text
+sourceosctl [--version] <command> [<subcommand>] [options]
 ```
 
-BYOM GGUF/local model verification path:
+### Commands
+
+| Command | Description |
+| --- | --- |
+| `sourceosctl doctor` | Run environment health checks (read-only) |
+| `sourceosctl profiles list` | List available SourceOS profiles (read-only) |
+| `sourceosctl nlboot evidence inspect <path>` | Inspect a NLBoot evidence JSON file (read-only) |
+| `sourceosctl nlboot evidence inspect --validate <path>` | Inspect and validate a NLBoot evidence file against its bundled schema (read-only) |
+| `sourceosctl nlboot evidence validate <path>` | Validate a NLBoot evidence file against its bundled JSON Schema (read-only) |
+| `sourceosctl release inspect <path>` | Inspect a release artifact JSON file (read-only) |
+| `sourceosctl release inspect-archive <path>` | Inspect a NLBoot release archive directory for required files (read-only) |
+| `sourceosctl fingerprint collect --dry-run` | Print environment fingerprint fields (dry-run only) |
+| `sourceosctl ai labs list` | List available AI labs (read-only) |
+| `sourceosctl agents sandbox plan --dry-run` | Print agent sandbox plan (dry-run only) |
+| `sourceosctl local-model doctor` | Inspect local model runtime and installed models without pulling weights or inference |
+| `sourceosctl local-model profiles` | List SourceOS Local Model Door profile refs |
+| `sourceosctl local-model plan --profile local-llama32-1b` | Render local model runtime plan without installing or running models |
+| `sourceosctl local-model route --task-class office-assist` | Render hash-only model route decision under local-first policy |
+| `sourceosctl local-model evidence inspect <path>` | Inspect local model route evidence JSON |
+| `sourceosctl network doctor` | Inspect Network Door contract posture without changing firewall, mesh, or provider state |
+| `sourceosctl network plan --destination <label>` | Render a hash-only Network Door route plan |
+| `sourceosctl network provider` | Render a BYOM / external model provider plan without contacting the provider |
+| `sourceosctl network evidence inspect <path>` | Inspect Network Door evidence JSON |
+| `sourceosctl native-assistant plan` | Render a native assistant bridge plan without invoking host assistant APIs |
+| `sourceosctl agent-machine mounts plan` | Render Agent Machine local mount plan for dev/docs/downloads roots (dry-run) |
+| `sourceosctl agent-machine mounts init --dry-run` | Render mount initialization plan; no directories or mounts are created |
+| `sourceosctl agent-machine mounts init --execute --policy-ok` | Create only scoped local output/download directories and emit AgentMachineMountEvidence |
+| `sourceosctl agent-machine mounts inspect [--include-downloads]` | Inspect default/local Agent Machine mount posture |
+| `sourceosctl agent-machine mounts evidence inspect <path>` | Inspect Agent Machine mount evidence JSON (read-only) |
+| `sourceosctl office doctor` | Inspect local Office Plane backend availability, including LibreOffice detection |
+| `sourceosctl office plan` | Render an OfficeArtifact-compatible workroom artifact plan |
+| `sourceosctl office generate --dry-run` | Render an Office generation plan without writing files |
+| `sourceosctl office generate --execute --policy-ok --format md|txt|json` | Write a guarded text/Markdown/JSON artifact and emit OfficeArtifactEvidence |
+| `sourceosctl office generate --execute --policy-ok --format docx|xlsx|pptx` | Write a guarded minimal OOXML artifact and emit OfficeArtifactEvidence |
+| `sourceosctl office convert <path> --to <format> --dry-run` | Render a LibreOffice-style conversion plan without writing files |
+| `sourceosctl office convert <path> --to <format> --execute --policy-ok` | Run guarded local LibreOffice conversion and emit OfficeArtifactEvidence |
+| `sourceosctl office inspect <path>` | Inspect a local office artifact file and hash it |
+| `sourceosctl office evidence inspect <path>` | Inspect Office Plane evidence JSON (read-only) |
+| `sourceosctl operation conformance --contracts-dir ../prophet-core-contracts` | Run Workspace Operation fixture bundle conformance checks |
+| `sourceosctl operation validate-fixture <path>` | Validate one Workspace Operation fixture |
+| `sourceosctl operation replay-fixture <output> --surface terminal-command\|browser-capture\|local-agent-execution` | Generate a local replay fixture starter |
+| `sourceosctl operation scaffold-adapter <output-dir>` | Scaffold starter adapter skeletons |
+| `sourceosctl diagnostics redact <input> --output <output>` | Export redacted diagnostics (cookies/tokens/keys/IDs/prompts/policy snippets) |
+
+### Running from the repo
 
 ```bash
-python3 bin/sourceosctl portable-ai prepare /Volumes/SOURCEOS_AI --profile byom-gguf --execute --policy-ok
-python3 bin/sourceosctl portable-ai byom verify /Volumes/SOURCEOS_AI ./models/example.gguf --name example --license-ref operator-attestation-required
-python3 bin/sourceosctl portable-ai byom verify /Volumes/SOURCEOS_AI ./models/example.gguf --name example --license-ref operator-attestation-required --execute --policy-ok --evidence-out ./byom-evidence.json
-python3 bin/sourceosctl portable-ai start-plan /Volumes/SOURCEOS_AI --provider ollama-compatible --surface turtleterm --model example
+python3 bin/sourceosctl --help
+python3 bin/sourceosctl doctor
+python3 bin/sourceosctl profiles list
+python3 bin/sourceosctl nlboot evidence inspect fixtures/sample_nlboot_evidence.json
+python3 bin/sourceosctl nlboot evidence inspect --validate fixtures/sample_nlboot_evidence.json
+python3 bin/sourceosctl nlboot evidence validate fixtures/sample_nlboot_evidence.json
+python3 bin/sourceosctl release inspect fixtures/sample_release.json
+python3 bin/sourceosctl release inspect-archive fixtures/nlboot_release_valid
+python3 bin/sourceosctl fingerprint collect --dry-run
+python3 bin/sourceosctl ai labs list
+python3 bin/sourceosctl agents sandbox plan --dry-run
+python3 bin/sourceosctl local-model doctor
+python3 bin/sourceosctl local-model profiles
+python3 bin/sourceosctl local-model plan --profile local-llama32-1b
+python3 bin/sourceosctl local-model route --task-class office-assist --prompt "local prompt text is hashed only"
+python3 bin/sourceosctl network doctor
+python3 bin/sourceosctl network plan --destination models.enterprise.example
+python3 bin/sourceosctl network plan --enterprise --mesh --allow-listed --destination models.enterprise.example
+python3 bin/sourceosctl network provider --provider-class openai-compatible --owner user
+python3 bin/sourceosctl native-assistant plan --operation open-workroom
+python3 bin/sourceosctl native-assistant plan --operation create-office-artifact --prompt "local prompt text is hashed only"
+python3 bin/sourceosctl agent-machine mounts plan
+python3 bin/sourceosctl agent-machine mounts init --dry-run
+python3 bin/sourceosctl agent-machine mounts init --execute --policy-ok --evidence-out ./mount-evidence.json
+python3 bin/sourceosctl agent-machine mounts inspect --include-downloads
+python3 bin/sourceosctl office doctor
+python3 bin/sourceosctl office plan --artifact-type slide-deck --format pptx --title "Demo Deck"
+python3 bin/sourceosctl office generate --dry-run --artifact-type document --format docx --title "Demo Report"
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type document --format md --title "Demo Report" --evidence-out ./office-evidence.json
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type document --format docx --title "Demo Report" --evidence-out ./office-docx-evidence.json
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type spreadsheet --format xlsx --title "Demo Workbook" --evidence-out ./office-xlsx-evidence.json
+python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type slide-deck --format pptx --title "Demo Deck" --evidence-out ./office-pptx-evidence.json
+python3 bin/sourceosctl office convert ./example.docx --to pdf --dry-run
+python3 bin/sourceosctl office convert ./example.docx --to pdf --execute --policy-ok --evidence-out ./office-convert-evidence.json
+python3 bin/sourceos operation conformance --contracts-dir ../prophet-core-contracts
+python3 bin/sourceos operation validate-fixture tests/fixtures/workspace-operation/minimal-operation.json --structural-only
+python3 bin/sourceos operation replay-fixture ./tmp-operation-replay.json --surface terminal-command
+python3 bin/sourceos operation scaffold-adapter ./tmp-adapter
+python3 bin/sourceos diagnostics redact ./diagnostic.log --output ./diagnostic.redacted.log
 ```
 
-Runtime planning path:
+### Local Model Door defaults
 
-```bash
-python3 bin/sourceosctl portable-ai start-plan /Volumes/SOURCEOS_AI --provider ollama-compatible --host 127.0.0.1 --port 11434 --surface turtleterm
-python3 bin/sourceosctl portable-ai stop-plan /Volumes/SOURCEOS_AI --provider ollama-compatible --host 127.0.0.1 --port 11434
-```
+The Local Model Door aligns with:
 
-`start-plan` emits runtime environment variables, local endpoint refs, command hints such as `ollama serve`, surface handoff data, model-pack selection, and Agent Machine activation requirements. `stop-plan` emits teardown guidance and safe-eject prerequisites. Neither command starts daemons, kills processes, downloads models, grants network, grants tool use, or stores prompt bodies.
-
-BYOM verification hashes a local file, records size and SHA-256, and emits a `ModelCarryPack` manifest. It does **not** download a model, contact a provider, start a runtime, grant network, grant tool use, or store prompt bodies.
-
-Portable AI Kit does **not** download model weights implicitly, start local daemons implicitly, run inference during preflight, or authorize prompt egress by default. Runtime activation belongs to Agent Machine. Model pack definitions belong to `SourceOS-Linux/sourceos-model-carry`. Routing belongs to `SocioProphet/model-router` under Policy Fabric posture.
+- `SourceOS-Linux/sourceos-model-carry` for local model profiles;
+- `SocioProphet/model-router` for routing;
+- `SocioProphet/model-governance-ledger` for personal tuning contracts;
+- `SociOS-Linux/socios` for opt-in personalization orchestration.
 
 Default profiles:
 
-| Profile key | Purpose | Minimum free space | Default posture |
+| Profile key | Model | Role |
+| --- | --- | --- |
+| `local-llama32-1b` | `llama3.2:1b` | laptop-safe router, triage, summarization, rewrite, Office assist |
+| `local-llama32-3b` | `llama3.2:3b` | quality local fallback |
+
+The Local Model Door does **not** pull model weights, start Ollama, run inference, send prompts off-device, or authorize tool use. `local-model route --prompt ...` emits only a SHA-256 prompt hash.
+
+### Network Door, Mesh Door, BYOM, and Native Assistant Door defaults
+
+The Network/Assistant Door slice aligns with `SourceOS-Linux/sourceos-spec`:
+
+- `NetworkAccessProfile`
+- `FirewallBindingProfile`
+- `MeshBindingProfile`
+- `ExternalModelProviderProfile`
+- `NativeAssistantBridgeProfile`
+
+Default refs:
+
+| Purpose | Ref |
+| --- | --- |
+| Enterprise/user network stack | `urn:srcos:network-access-profile:enterprise-and-user-default` |
+| User firewall profile | `urn:srcos:firewall-binding-profile:macos-lulu-user-default` |
+| Enterprise firewall profile | `urn:srcos:firewall-binding-profile:enterprise-gateway-default` |
+| Istio/Admiral-style mesh profile | `urn:srcos:mesh-binding-profile:istio-egress-default` |
+| User BYOM OpenAI-compatible provider profile | `urn:srcos:external-model-provider-profile:user-openai-compatible` |
+| Apple App Intents native assistant bridge profile | `urn:srcos:native-assistant-bridge-profile:apple-app-intents-default` |
+
+The Network Door does **not** mutate firewall rules, install mesh components, contact external model providers, store credentials, or send prompts. Destination labels are represented as SHA-256 hashes in route plans.
+
+The Native Assistant Door does **not** invoke Siri, App Intents, Shortcuts, Android intents, Windows shell integrations, browser extensions, or MCP/native bridge transports. It renders a bridge plan with prompt text redacted to a SHA-256 hash when provided.
+
+Default policy posture:
+
+- default egress is denied;
+- BYOM provider auth must be a reference, never inline;
+- enterprise firewall denies have precedence over user allows;
+- user firewall profiles may be stricter than enterprise profiles;
+- mesh binding and firewall binding are complementary, not interchangeable;
+- prompt egress is denied by default;
+- native assistant side effects require user confirmation;
+- raw app database access is denied by default.
+
+See `docs/integration/network-native-assistant-door.md`.
+
+### Agent Machine local mount defaults
+
+The first Agent Machine mount slice aligns with the SourceOS contracts in `SourceOS-Linux/sourceos-spec`:
+
+- `AgentMachineLocalDataPlane`
+- `AgentMachineMountPolicy`
+- `TopoLVMPlacementProfile`
+
+Default host roots:
+
+| Purpose | Host path | Agent path | Posture |
 | --- | --- | --- | --- |
-| `tiny-router` | Routing, triage, rewrite, summarization | 8 GB | local-only, no tools |
-| `laptop-safe` | Offline fallback, Office assist, privacy-first chat | 16 GB | prompt egress denied |
-| `office-local` | Office Plane summarization and artifact drafting | 32 GB | workroom-scoped host writes |
-| `code-local` | Repo triage and local coding assistance | 32 GB | repo-scoped host writes |
-| `field-kit` | Field/operator portable SSD kit | 64 GB | evidence-first |
-| `byom-gguf` | Bring-your-own GGUF import profile | varies | hash required before eligibility |
+| Code / repositories | `~/dev` | `/workspace/dev` | read/write; explicit workspace root |
+| Generated documents / reports | `~/Documents/SourceOS/agent-output` | `/workspace/output` | read/write; created only by explicit guarded materialization |
+| Browser downloads | `~/Downloads/SourceOS/agent-downloads` | `/workspace/downloads` | browser read/write; agent read-only |
+
+The CLI does **not** mount `$HOME` wholesale and does **not** expose `.ssh`, `.gnupg`, browser profiles, keychains, cloud credential directories, token stores, or password stores by default.
+
+Guarded materialization creates only the declared `createIfMissing` folders. It does not create Podman machines, Podman bind mounts, containers, or background services.
+
+TopoLVM is treated as a Linux cluster-local backend profile for the same logical mount contract. It is not used for macOS/APFS local mode and it is not represented as cross-node shared storage.
+
+### Office Plane local defaults
+
+The Office Plane aligns with `SocioProphet/prophet-workspace`:
+
+- `ProfessionalWorkroom`
+- `OfficeArtifact`
+
+Default paths:
+
+| Purpose | Host path | Agent path |
+| --- | --- | --- |
+| Workroom output | `~/Documents/SourceOS/agent-output` | `/workspace/output` |
+| Browser downloads | `~/Downloads/SourceOS/agent-downloads` | `/workspace/downloads` |
+| Code/templates | `~/dev` | `/workspace/dev` |
+
+Backends are modeled as an abstraction:
+
+- LibreOffice: local-first default for headless generation, inspection, render, and conversion.
+- Collabora: future browser-collaboration / WOPI-style backend.
+- ONLYOFFICE: future optional document-builder/editor backend.
+- Microsoft Graph / Office 365 and Google Workspace: compatibility adapters, not core authority.
+- SourceOS-native: future native document surfaces.
+
+Guarded Office execution is intentionally bounded:
+
+- `office generate --execute --policy-ok` writes `txt`, `md`, `json`, `docx`, `xlsx`, or `pptx` artifacts.
+- DOCX/XLSX/PPTX generation uses a minimal dependency-light OOXML bootstrap builder, not a full template or collaboration engine.
+- ODT/ODS/ODP and other binary formats remain conversion/backend territory until LibreOffice/Collabora/ONLYOFFICE template backends are hardened.
+- `office convert --execute --policy-ok` uses local LibreOffice/`soffice` when available.
+- All guarded Office execution emits or writes `OfficeArtifactEvidence`.
+- Email sending, external publishing, and calendar modification remain policy-gated side effects and are not enabled here.
+
+### Design constraints
+
+All mutating commands require `--execute --policy-ok`. Commands that would mutate host state without both flags are rejected at runtime.
 
 ## First milestone
 
@@ -101,14 +270,16 @@ M1 is repo maturity and install surface definition:
 - `SourceOS-Linux/sourceos-spec`: canonical SourceOS schemas and contracts.
 - `SourceOS-Linux/sourceos-boot`: SourceOS boot/recovery integration.
 - `SourceOS-Linux/sourceos-model-carry`: local model profiles and carry-layer service refs.
-- `SourceOS-Linux/agent-machine`: governed local runtime activation, teardown, and evidence receipts.
-- `SourceOS-Linux/TurtleTerm`: first-class terminal surface for Portable AI Kit.
 - `SourceOS-Linux/agent-term`: terminal-native SourceOS operator ChatOps console.
+- `SociOS-Linux/workstation-contracts`: workstation/CI conformance contracts and IPC receipts.
+- `SociOS-Linux/socios`: opt-in automation and personalization orchestration.
+- `SocioProphet/prophet-workspace`: workspace product semantics, Professional Workrooms, and OfficeArtifact contracts.
 - `SocioProphet/homebrew-prophet`: Homebrew install formulae.
 - `SocioProphet/model-router`: governed model/service routing.
 - `SocioProphet/guardrail-fabric`: guardrail policy client integration.
-- `SocioProphet/model-governance-ledger`: evidence and promotion records.
+- `SocioProphet/model-governance-ledger`: evidence, consent, evaluation, promotion, and personalization governance records.
 - `SocioProphet/agent-registry`: governed agent identity/tool-grant contracts.
+- `SocioProphet/agentplane`: governed execution, placement, run, replay, and evidence.
 
 ## Validation
 
@@ -116,4 +287,8 @@ M1 is repo maturity and install surface definition:
 make validate
 ```
 
-The validation target checks repository metadata and runs the unit test suite. Implementation-specific validation should be added with each tool surface.
+The validation target runs the unit test suite and checks repository metadata. All tests must pass.
+
+```bash
+make test   # run tests only
+```

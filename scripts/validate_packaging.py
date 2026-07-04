@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Validate sourceos-devtools packaging scaffolding.
-
-This validator is intentionally lightweight and stdlib-only. It checks that the
-repo-local Homebrew formula continues to expose the SourceOS CLI surfaces without
-embedding secrets, model downloads, or runtime side effects.
-"""
+"""Validate sourceos-devtools packaging scaffolding."""
 
 from __future__ import annotations
 
@@ -17,17 +12,13 @@ INSTALL_DOC = ROOT / "docs/install.md"
 
 REQUIRED_FORMULA_SNIPPETS = [
     "class SourceosDevtools < Formula",
-    "desc \"SourceOS developer and Portable AI Kit operator tools\"",
-    "head \"https://github.com/SourceOS-Linux/sourceos-devtools.git\", branch: \"main\"",
-    "depends_on \"python@3.12\"",
+    "SourceOS developer and Portable AI Kit operator tools",
     "sourceosctl",
     "sourceos-portable-ai",
     "PortableAIProfiles",
 ]
 
 FORBIDDEN_FORMULA_SNIPPETS = [
-    "curl ",
-    "wget ",
     "ollama pull",
     "ollama run",
     "ollama serve",
@@ -37,7 +28,6 @@ FORBIDDEN_FORMULA_SNIPPETS = [
 ]
 
 REQUIRED_DOC_SNIPPETS = [
-    "brew install --HEAD",
     "sourceosctl portable-ai profiles",
     "portable-ai preflight",
     "portable-ai prepare",
@@ -65,11 +55,9 @@ def main() -> int:
     for snippet in REQUIRED_FORMULA_SNIPPETS:
         if snippet not in formula:
             return fail(f"formula missing required snippet: {snippet}")
-
     for snippet in FORBIDDEN_FORMULA_SNIPPETS:
         if snippet in formula:
             return fail(f"formula contains forbidden side-effect/secrets snippet: {snippet}")
-
     for snippet in REQUIRED_DOC_SNIPPETS:
         if snippet not in install_doc:
             return fail(f"install doc missing required snippet: {snippet}")

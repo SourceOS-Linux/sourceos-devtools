@@ -6,11 +6,9 @@ from __future__ import annotations
 import os
 import sys
 
-# Allow running directly from the repo root without installing.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sourceosctl.commands.portable_ai_cli import main
-
 
 if __name__ == "__main__":
     sys.exit(main())

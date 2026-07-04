@@ -1,0 +1,8 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "name": "nlboot-client-sbom",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://example.invalid/nlboot-client-stub",
+  "note": "stub SBOM for fixture/inspection purposes only"
+}
