@@ -70,11 +70,6 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl local-model plan --profile local-llama32-1b` | Render local model runtime plan without installing or running models |
 | `sourceosctl local-model route --task-class office-assist` | Render hash-only model route decision under local-first policy |
 | `sourceosctl local-model evidence inspect <path>` | Inspect local model route evidence JSON |
-| `sourceosctl network doctor` | Inspect Network Door contract posture without changing firewall, mesh, or provider state |
-| `sourceosctl network plan --destination <label>` | Render a hash-only Network Door route plan |
-| `sourceosctl network provider` | Render a BYOM / external model provider plan without contacting the provider |
-| `sourceosctl network evidence inspect <path>` | Inspect Network Door evidence JSON |
-| `sourceosctl native-assistant plan` | Render a native assistant bridge plan without invoking host assistant APIs |
 | `sourceosctl agent-machine mounts plan` | Render Agent Machine local mount plan for dev/docs/downloads roots (dry-run) |
 | `sourceosctl agent-machine mounts init --dry-run` | Render mount initialization plan; no directories or mounts are created |
 | `sourceosctl agent-machine mounts init --execute --policy-ok` | Create only scoped local output/download directories and emit AgentMachineMountEvidence |
@@ -112,12 +107,6 @@ python3 bin/sourceosctl local-model doctor
 python3 bin/sourceosctl local-model profiles
 python3 bin/sourceosctl local-model plan --profile local-llama32-1b
 python3 bin/sourceosctl local-model route --task-class office-assist --prompt "local prompt text is hashed only"
-python3 bin/sourceosctl network doctor
-python3 bin/sourceosctl network plan --destination models.enterprise.example
-python3 bin/sourceosctl network plan --enterprise --mesh --allow-listed --destination models.enterprise.example
-python3 bin/sourceosctl network provider --provider-class openai-compatible --owner user
-python3 bin/sourceosctl native-assistant plan --operation open-workroom
-python3 bin/sourceosctl native-assistant plan --operation create-office-artifact --prompt "local prompt text is hashed only"
 python3 bin/sourceosctl agent-machine mounts plan
 python3 bin/sourceosctl agent-machine mounts init --dry-run
 python3 bin/sourceosctl agent-machine mounts init --execute --policy-ok --evidence-out ./mount-evidence.json
@@ -147,44 +136,6 @@ Default profiles:
 | `local-llama32-3b` | `llama3.2:3b` | quality local fallback |
 
 The Local Model Door does **not** pull model weights, start Ollama, run inference, send prompts off-device, or authorize tool use. `local-model route --prompt ...` emits only a SHA-256 prompt hash.
-
-### Network Door, Mesh Door, BYOM, and Native Assistant Door defaults
-
-The Network/Assistant Door slice aligns with `SourceOS-Linux/sourceos-spec`:
-
-- `NetworkAccessProfile`
-- `FirewallBindingProfile`
-- `MeshBindingProfile`
-- `ExternalModelProviderProfile`
-- `NativeAssistantBridgeProfile`
-
-Default refs:
-
-| Purpose | Ref |
-| --- | --- |
-| Enterprise/user network stack | `urn:srcos:network-access-profile:enterprise-and-user-default` |
-| User firewall profile | `urn:srcos:firewall-binding-profile:macos-lulu-user-default` |
-| Enterprise firewall profile | `urn:srcos:firewall-binding-profile:enterprise-gateway-default` |
-| Istio/Admiral-style mesh profile | `urn:srcos:mesh-binding-profile:istio-egress-default` |
-| User BYOM OpenAI-compatible provider profile | `urn:srcos:external-model-provider-profile:user-openai-compatible` |
-| Apple App Intents native assistant bridge profile | `urn:srcos:native-assistant-bridge-profile:apple-app-intents-default` |
-
-The Network Door does **not** mutate firewall rules, install mesh components, contact external model providers, store credentials, or send prompts. Destination labels are represented as SHA-256 hashes in route plans.
-
-The Native Assistant Door does **not** invoke Siri, App Intents, Shortcuts, Android intents, Windows shell integrations, browser extensions, or MCP/native bridge transports. It renders a bridge plan with prompt text redacted to a SHA-256 hash when provided.
-
-Default policy posture:
-
-- default egress is denied;
-- BYOM provider auth must be a reference, never inline;
-- enterprise firewall denies have precedence over user allows;
-- user firewall profiles may be stricter than enterprise profiles;
-- mesh binding and firewall binding are complementary, not interchangeable;
-- prompt egress is denied by default;
-- native assistant side effects require user confirmation;
-- raw app database access is denied by default.
-
-See `docs/integration/network-native-assistant-door.md`.
 
 ### Agent Machine local mount defaults
 

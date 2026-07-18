@@ -12,6 +12,9 @@ from sourceosctl.commands import (
     fingerprint,
     ai,
     agents,
+    local_model,
+    agent_machine,
+    office,
 )
 
 
@@ -110,6 +113,84 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print plan without executing (default: True)",
     )
     agents_sandbox_plan_p.set_defaults(func=agents.sandbox_plan)
+
+    # --- local-model ---
+    local_model_p = sub.add_parser("local-model", help="Local Model Door helpers")
+    local_model_sub = local_model_p.add_subparsers(
+        dest="local_model_command", metavar="<subcommand>"
+    )
+    local_model_sub.required = True
+
+    local_model_doctor_p = local_model_sub.add_parser(
+        "doctor", help="Inspect local model runtime availability without pulling or inference"
+    )
+    local_model_doctor_p.set_defaults(func=local_model.doctor)
+
+    local_model_profiles_p = local_model_sub.add_parser(
+        "profiles", help="List built-in local model profile references"
+    )
+    local_model_profiles_p.set_defaults(func=local_model.profiles)
+
+    local_model_plan_p = local_model_sub.add_parser(
+        "plan", help="Render a local model runtime plan without pulling weights"
+    )
+    local_model_plan_p.add_argument(
+        "--profile",
+        default="local-llama32-1b",
+        choices=sorted(local_model.LOCAL_MODEL_PROFILES),
+        help="Local model profile key",
+    )
+    local_model_plan_p.set_defaults(func=local_model.plan)
+
+    local_model_route_p = local_model_sub.add_parser(
+        "route", help="Render a hash-only local model route decision"
+    )
+    local_model_route_p.add_argument(
+        "--task-class",
+        required=True,
+        choices=[
+            "router",
+            "triage",
+            "summarization",
+            "rewrite",
+            "office-assist",
+            "agent-machine-assist",
+            "offline-fallback",
+            "coding-assist",
+            "privacy-first-chat",
+            "complex-reasoning",
+        ],
+        help="Task class to route",
+    )
+    local_model_route_p.add_argument(
+        "--prompt",
+        default=None,
+        help="Optional prompt text; only a SHA-256 hash is emitted",
+    )
+    local_model_route_p.add_argument(
+        "--personalization-ref",
+        default=None,
+        help="Optional personal model/adaptation governance reference",
+    )
+    local_model_route_p.add_argument(
+        "--router-binding-ref",
+        default=local_model.DEFAULT_ROUTER_BINDING_REF,
+        help="Model-router binding reference",
+    )
+    local_model_route_p.set_defaults(func=local_model.route)
+
+    local_model_evidence_p = local_model_sub.add_parser(
+        "evidence", help="Local model evidence helpers"
+    )
+    local_model_evidence_sub = local_model_evidence_p.add_subparsers(
+        dest="local_model_evidence_command", metavar="<subcommand>"
+    )
+    local_model_evidence_sub.required = True
+    local_model_evidence_inspect_p = local_model_evidence_sub.add_parser(
+        "inspect", help="Inspect local model route evidence JSON"
+    )
+    local_model_evidence_inspect_p.add_argument("path", help="Path to local model evidence JSON")
+    local_model_evidence_inspect_p.set_defaults(func=local_model.evidence_inspect)
 
     # --- agent-machine ---
     agent_machine_p = sub.add_parser("agent-machine", help="Agent Machine helpers")
