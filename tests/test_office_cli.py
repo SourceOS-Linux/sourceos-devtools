@@ -99,12 +99,12 @@ class TestOfficeCommands(unittest.TestCase):
         )
         self.assertEqual(office.generate(args), 1)
 
-    def test_office_generate_execute_rejects_unsupported_binary_formats(self):
+    def test_office_generate_execute_rejects_binary_formats(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             args = _office_args(
                 execute=True,
                 policy_ok=True,
-                format="odt",
+                format="docx",
                 output_root=tmpdir,
                 template=None,
                 prompt_ref=None,
@@ -138,163 +138,6 @@ class TestOfficeCommands(unittest.TestCase):
             self.assertEqual(evidence["kind"], "OfficeArtifactEvidence")
             self.assertEqual(evidence["operation"], "generate")
             self.assertEqual(evidence["status"], "requires-review")
-            self.assertTrue(evidence["artifactHashes"][0]["sha256"].startswith("sha256:"))
-
-    def test_office_generate_execute_writes_docx_package_and_evidence(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            evidence_path = os.path.join(tmpdir, "evidence", "docx.json")
-            rc = main([
-                "office",
-                "generate",
-                "--execute",
-                "--policy-ok",
-                "--artifact-type",
-                "document",
-                "--format",
-                "docx",
-                "--title",
-                "Safe Doc",
-                "--output-root",
-                tmpdir,
-                "--evidence-out",
-                evidence_path,
-            ])
-            self.assertEqual(rc, 0)
-            output_path = os.path.join(tmpdir, "safe-doc.docx")
-            self.assertTrue(os.path.exists(output_path))
-            _assert_zip_contains(output_path, ["[Content_Types].xml", "_rels/.rels", "word/document.xml"])
-            with open(evidence_path, "r", encoding="utf-8") as handle:
-                evidence = json.load(handle)
-            self.assertEqual(evidence["format"], "docx")
-            self.assertEqual(evidence["artifactHashes"][0]["mimeType"], "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
-    def test_office_generate_execute_writes_xlsx_package(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rc = main([
-                "office",
-                "generate",
-                "--execute",
-                "--policy-ok",
-                "--artifact-type",
-                "spreadsheet",
-                "--format",
-                "xlsx",
-                "--title",
-                "Safe Sheet",
-                "--output-root",
-                tmpdir,
-            ])
-            self.assertEqual(rc, 0)
-            output_path = os.path.join(tmpdir, "safe-sheet.xlsx")
-            self.assertTrue(os.path.exists(output_path))
-            _assert_zip_contains(
-                output_path,
-                ["[Content_Types].xml", "_rels/.rels", "xl/workbook.xml", "xl/worksheets/sheet1.xml"],
-            )
-
-    def test_office_generate_execute_writes_pptx_package(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rc = main([
-                "office",
-                "generate",
-                "--execute",
-                "--policy-ok",
-                "--artifact-type",
-                "slide-deck",
-                "--format",
-                "pptx",
-                "--title",
-                "Safe Deck",
-                "--output-root",
-                tmpdir,
-            ])
-            self.assertEqual(rc, 0)
-            output_path = os.path.join(tmpdir, "safe-deck.pptx")
-            self.assertTrue(os.path.exists(output_path))
-            _assert_zip_contains(
-                output_path,
-                ["[Content_Types].xml", "_rels/.rels", "ppt/presentation.xml", "ppt/slides/slide1.xml"],
-            )
-
-    def test_office_validate_accepts_generated_docx_and_writes_evidence(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "safe-doc.docx")
-            evidence_path = os.path.join(tmpdir, "evidence", "validate.json")
-            rc = main([
-                "office",
-                "generate",
-                "--execute",
-                "--policy-ok",
-                "--artifact-type",
-                "document",
-                "--format",
-                "docx",
-                "--title",
-                "Safe Doc",
-                "--output-root",
-                tmpdir,
-            ])
-            self.assertEqual(rc, 0)
-            rc = main([
-                "office",
-                "validate",
-                output_path,
-                "--evidence-out",
-                evidence_path,
-            ])
-            self.assertEqual(rc, 0)
-            with open(evidence_path, "r", encoding="utf-8") as handle:
-                evidence = json.load(handle)
-            self.assertEqual(evidence["kind"], "OfficeArtifactEvidence")
-            self.assertEqual(evidence["operation"], "analyze")
-            self.assertEqual(evidence["status"], "success")
-
-    def test_office_validate_rejects_invalid_docx_zip(self):
-        with tempfile.NamedTemporaryFile(suffix=".docx", mode="w", delete=False) as handle:
-            handle.write("not a zip")
-            tmp_path = handle.name
-        try:
-            self.assertEqual(main(["office", "validate", tmp_path]), 1)
-        finally:
-            os.unlink(tmp_path)
-
-    def test_office_validate_roundtrip_requires_policy_ok(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rc = main([
-                "office",
-                "generate",
-                "--execute",
-                "--policy-ok",
-                "--artifact-type",
-                "document",
-                "--format",
-                "docx",
-                "--title",
-                "Safe Doc",
-                "--output-root",
-                tmpdir,
-            ])
-            self.assertEqual(rc, 0)
-            self.assertEqual(main(["office", "validate", os.path.join(tmpdir, "safe-doc.docx"), "--roundtrip"]), 1)
-
-    def test_office_inspect_includes_quality_gate_for_ooxml(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            rc = main([
-                "office",
-                "generate",
-                "--execute",
-                "--policy-ok",
-                "--artifact-type",
-                "slide-deck",
-                "--format",
-                "pptx",
-                "--title",
-                "Safe Deck",
-                "--output-root",
-                tmpdir,
-            ])
-            self.assertEqual(rc, 0)
-            self.assertEqual(main(["office", "inspect", os.path.join(tmpdir, "safe-deck.pptx")]), 0)
 
     def test_office_generate_execute_rejects_whole_home_output_root(self):
         args = _office_args(

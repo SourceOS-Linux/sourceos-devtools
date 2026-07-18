@@ -111,6 +111,207 @@ def build_parser() -> argparse.ArgumentParser:
     )
     agents_sandbox_plan_p.set_defaults(func=agents.sandbox_plan)
 
+    # --- agent-machine ---
+    agent_machine_p = sub.add_parser("agent-machine", help="Agent Machine helpers")
+    agent_machine_sub = agent_machine_p.add_subparsers(
+        dest="agent_machine_command", metavar="<subcommand>"
+    )
+    agent_machine_sub.required = True
+
+    mounts_p = agent_machine_sub.add_parser("mounts", help="Agent Machine mount helpers")
+    mounts_sub = mounts_p.add_subparsers(dest="agent_machine_mounts_command", metavar="<subcommand>")
+    mounts_sub.required = True
+
+    def add_mount_common(p):
+        p.add_argument("--profile", default="macos-podman", help="Agent Machine profile name")
+        p.add_argument("--dev-root", default="~/dev", help="Host code/repository root")
+        p.add_argument(
+            "--docs-root",
+            default="~/Documents/SourceOS/agent-output",
+            help="Host generated document/report output root",
+        )
+        p.add_argument(
+            "--downloads-root",
+            default="~/Downloads/SourceOS/agent-downloads",
+            help="Host scoped browser downloads root",
+        )
+
+    mounts_plan_p = mounts_sub.add_parser("plan", help="Render mount plan (dry-run)")
+    add_mount_common(mounts_plan_p)
+    mounts_plan_p.set_defaults(func=agent_machine.mounts_plan)
+
+    mounts_init_p = mounts_sub.add_parser(
+        "init", help="Render or execute guarded local directory materialization"
+    )
+    add_mount_common(mounts_init_p)
+    mounts_init_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        dest="dry_run",
+        help="Print plan without creating directories or mounts (default: True)",
+    )
+    mounts_init_p.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Create only explicitly-scoped output/download directories; does not create Podman mounts",
+    )
+    mounts_init_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm Policy Fabric/operator approval for guarded local materialization",
+    )
+    mounts_init_p.add_argument(
+        "--evidence-out",
+        default=None,
+        help="Optional path to write AgentMachineMountEvidence JSON",
+    )
+    mounts_init_p.set_defaults(func=agent_machine.mounts_init)
+
+    mounts_inspect_p = mounts_sub.add_parser("inspect", help="Inspect default/local mount posture")
+    add_mount_common(mounts_inspect_p)
+    mounts_inspect_p.add_argument(
+        "--include-downloads",
+        action="store_true",
+        default=False,
+        help="Include scoped browser downloads mount in output",
+    )
+    mounts_inspect_p.set_defaults(func=agent_machine.mounts_inspect)
+
+    mounts_evidence_p = mounts_sub.add_parser("evidence", help="Mount evidence helpers")
+    mounts_evidence_sub = mounts_evidence_p.add_subparsers(
+        dest="agent_machine_mounts_evidence_command", metavar="<subcommand>"
+    )
+    mounts_evidence_sub.required = True
+    mounts_evidence_inspect_p = mounts_evidence_sub.add_parser(
+        "inspect", help="Inspect an Agent Machine mount evidence JSON file"
+    )
+    mounts_evidence_inspect_p.add_argument("path", help="Path to mount evidence JSON file")
+    mounts_evidence_inspect_p.set_defaults(func=agent_machine.mounts_evidence_inspect)
+
+    # --- office ---
+    office_p = sub.add_parser("office", help="Office Plane helpers")
+    office_sub = office_p.add_subparsers(dest="office_command", metavar="<subcommand>")
+    office_sub.required = True
+
+    def add_office_common(p):
+        p.add_argument("--workroom-id", default="workroom-local-default", help="Professional Workroom id")
+        p.add_argument("--title", default="Untitled Office Artifact", help="Office artifact title")
+        p.add_argument(
+            "--artifact-type",
+            default="document",
+            choices=office.SUPPORTED_ARTIFACT_TYPES,
+            help="Office artifact type",
+        )
+        p.add_argument(
+            "--format",
+            default="docx",
+            choices=office.SUPPORTED_FORMATS,
+            help="Office artifact output format",
+        )
+        p.add_argument("--backend", default="libreoffice", help="Office backend engine")
+        p.add_argument("--mode", default="local-headless", help="Office backend mode")
+        p.add_argument(
+            "--output-root",
+            default="~/Documents/SourceOS/agent-output",
+            help="Host Office output root",
+        )
+        p.add_argument(
+            "--downloads-root",
+            default="~/Downloads/SourceOS/agent-downloads",
+            help="Host scoped browser downloads root",
+        )
+        p.add_argument("--template-root", default="~/dev", help="Host template/code root")
+
+    office_doctor_p = office_sub.add_parser("doctor", help="Inspect local Office backend availability")
+    office_doctor_p.set_defaults(func=office.doctor)
+
+    office_plan_p = office_sub.add_parser("plan", help="Render OfficeArtifact-compatible plan")
+    add_office_common(office_plan_p)
+    office_plan_p.set_defaults(func=office.plan)
+
+    office_generate_p = office_sub.add_parser(
+        "generate", help="Render or execute guarded Office text/Markdown/JSON generation"
+    )
+    add_office_common(office_generate_p)
+    office_generate_p.add_argument("--template", default=None, help="Optional template reference")
+    office_generate_p.add_argument("--prompt-ref", default=None, help="Optional prompt/context reference")
+    office_generate_p.add_argument("--data-ref", default=None, help="Optional structured data reference")
+    office_generate_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        dest="dry_run",
+        help="Print generation plan without writing files (default: True)",
+    )
+    office_generate_p.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Write txt/md/json artifacts only; Office binary generation remains disabled",
+    )
+    office_generate_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm Policy Fabric/operator approval for guarded Office generation",
+    )
+    office_generate_p.add_argument(
+        "--evidence-out",
+        default=None,
+        help="Optional path to write OfficeArtifactEvidence JSON",
+    )
+    office_generate_p.set_defaults(func=office.generate)
+
+    office_convert_p = office_sub.add_parser(
+        "convert", help="Render or execute guarded LibreOffice conversion"
+    )
+    office_convert_p.add_argument("input", help="Input Office artifact path")
+    office_convert_p.add_argument("--to", required=True, help="Target format, e.g. pdf, docx, pptx")
+    add_office_common(office_convert_p)
+    office_convert_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        dest="dry_run",
+        help="Print conversion plan without writing files (default: True)",
+    )
+    office_convert_p.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Run LibreOffice conversion under guarded local execution",
+    )
+    office_convert_p.add_argument(
+        "--policy-ok",
+        action="store_true",
+        default=False,
+        help="Confirm Policy Fabric/operator approval for guarded Office conversion",
+    )
+    office_convert_p.add_argument(
+        "--evidence-out",
+        default=None,
+        help="Optional path to write OfficeArtifactEvidence JSON",
+    )
+    office_convert_p.set_defaults(func=office.convert)
+
+    office_inspect_p = office_sub.add_parser("inspect", help="Inspect an Office artifact file")
+    office_inspect_p.add_argument("path", help="Path to Office artifact file")
+    office_inspect_p.set_defaults(func=office.inspect)
+
+    office_evidence_p = office_sub.add_parser("evidence", help="Office evidence helpers")
+    office_evidence_sub = office_evidence_p.add_subparsers(
+        dest="office_evidence_command", metavar="<subcommand>"
+    )
+    office_evidence_sub.required = True
+    office_evidence_inspect_p = office_evidence_sub.add_parser(
+        "inspect", help="Inspect an Office Plane evidence JSON file"
+    )
+    office_evidence_inspect_p.add_argument("path", help="Path to Office evidence JSON file")
+    office_evidence_inspect_p.set_defaults(func=office.evidence_inspect)
+
     return parser
 
 

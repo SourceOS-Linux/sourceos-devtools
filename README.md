@@ -84,7 +84,6 @@ sourceosctl [--version] <command> [<subcommand>] [options]
 | `sourceosctl office plan` | Render an OfficeArtifact-compatible workroom artifact plan |
 | `sourceosctl office generate --dry-run` | Render an Office generation plan without writing files |
 | `sourceosctl office generate --execute --policy-ok --format md|txt|json` | Write a guarded text/Markdown/JSON artifact and emit OfficeArtifactEvidence |
-| `sourceosctl office generate --execute --policy-ok --format docx|xlsx|pptx` | Write a guarded minimal OOXML artifact and emit OfficeArtifactEvidence |
 | `sourceosctl office convert <path> --to <format> --dry-run` | Render a LibreOffice-style conversion plan without writing files |
 | `sourceosctl office convert <path> --to <format> --execute --policy-ok` | Run guarded local LibreOffice conversion and emit OfficeArtifactEvidence |
 | `sourceosctl office inspect <path>` | Inspect a local office artifact file and hash it |
@@ -127,16 +126,8 @@ python3 bin/sourceosctl office doctor
 python3 bin/sourceosctl office plan --artifact-type slide-deck --format pptx --title "Demo Deck"
 python3 bin/sourceosctl office generate --dry-run --artifact-type document --format docx --title "Demo Report"
 python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type document --format md --title "Demo Report" --evidence-out ./office-evidence.json
-python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type document --format docx --title "Demo Report" --evidence-out ./office-docx-evidence.json
-python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type spreadsheet --format xlsx --title "Demo Workbook" --evidence-out ./office-xlsx-evidence.json
-python3 bin/sourceosctl office generate --execute --policy-ok --artifact-type slide-deck --format pptx --title "Demo Deck" --evidence-out ./office-pptx-evidence.json
 python3 bin/sourceosctl office convert ./example.docx --to pdf --dry-run
 python3 bin/sourceosctl office convert ./example.docx --to pdf --execute --policy-ok --evidence-out ./office-convert-evidence.json
-python3 bin/sourceos operation conformance --contracts-dir ../prophet-core-contracts
-python3 bin/sourceos operation validate-fixture tests/fixtures/workspace-operation/minimal-operation.json --structural-only
-python3 bin/sourceos operation replay-fixture ./tmp-operation-replay.json --surface terminal-command
-python3 bin/sourceos operation scaffold-adapter ./tmp-adapter
-python3 bin/sourceos diagnostics redact ./diagnostic.log --output ./diagnostic.redacted.log
 ```
 
 ### Local Model Door defaults
@@ -240,11 +231,10 @@ Backends are modeled as an abstraction:
 - Microsoft Graph / Office 365 and Google Workspace: compatibility adapters, not core authority.
 - SourceOS-native: future native document surfaces.
 
-Guarded Office execution is intentionally bounded:
+Guarded Office execution is intentionally narrow:
 
-- `office generate --execute --policy-ok` writes `txt`, `md`, `json`, `docx`, `xlsx`, or `pptx` artifacts.
-- DOCX/XLSX/PPTX generation uses a minimal dependency-light OOXML bootstrap builder, not a full template or collaboration engine.
-- ODT/ODS/ODP and other binary formats remain conversion/backend territory until LibreOffice/Collabora/ONLYOFFICE template backends are hardened.
+- `office generate --execute --policy-ok` currently writes only `txt`, `md`, or `json` artifacts.
+- Office binary generation (`docx`, `xlsx`, `pptx`, `odt`, `ods`, `odp`) remains disabled until template/render backends are hardened.
 - `office convert --execute --policy-ok` uses local LibreOffice/`soffice` when available.
 - All guarded Office execution emits or writes `OfficeArtifactEvidence`.
 - Email sending, external publishing, and calendar modification remain policy-gated side effects and are not enabled here.
@@ -252,45 +242,6 @@ Guarded Office execution is intentionally bounded:
 ### Design constraints
 
 All mutating commands require `--execute --policy-ok`. Commands that would mutate host state without both flags are rejected at runtime.
-
-## sourceosctl CLI
-
-`sourceosctl` is the read-only/dry-run CLI surface for SourceOS developer and AI operator workflows.
-
-### Usage
-
-```text
-sourceosctl [--version] <command> [<subcommand>] [options]
-```
-
-### Commands
-
-| Command | Description |
-| --- | --- |
-| `sourceosctl doctor` | Run environment health checks (read-only) |
-| `sourceosctl profiles list` | List available SourceOS profiles (read-only) |
-| `sourceosctl nlboot evidence inspect <path>` | Inspect a NLBoot evidence JSON file (read-only) |
-| `sourceosctl release inspect <path>` | Inspect a release artifact JSON file (read-only) |
-| `sourceosctl fingerprint collect --dry-run` | Print environment fingerprint fields (dry-run only) |
-| `sourceosctl ai labs list` | List available AI labs (read-only) |
-| `sourceosctl agents sandbox plan --dry-run` | Print agent sandbox plan (dry-run only) |
-
-### Running from the repo
-
-```bash
-python3 bin/sourceosctl --help
-python3 bin/sourceosctl doctor
-python3 bin/sourceosctl profiles list
-python3 bin/sourceosctl nlboot evidence inspect fixtures/sample_nlboot_evidence.json
-python3 bin/sourceosctl release inspect fixtures/sample_release.json
-python3 bin/sourceosctl fingerprint collect --dry-run
-python3 bin/sourceosctl ai labs list
-python3 bin/sourceosctl agents sandbox plan --dry-run
-```
-
-### Design constraints
-
-All commands in the current surface are **read-only or dry-run**. No mutating command is implemented. Commands that would mutate host state are explicitly rejected at runtime.
 
 ## First milestone
 
